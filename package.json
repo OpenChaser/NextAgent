@@ -1,0 +1,45 @@
+{
+  "name": "nextagent",
+  "version": "1.0.0",
+  "description": "NextAgent - AI Work Assistant",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --project tsconfig.main.json && vite build",
+    "electron": "electron .",
+    "start": "concurrently \"npm run dev\" \"npm run electron:wait\"",
+    "electron:wait": "wait-on http://localhost:5173 && npm run electron",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@gitcode.com:baiguochao/NextAgent.git"
+  },
+  "keywords": [
+    "electron",
+    "AI",
+    "workspace",
+    "assistant"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "electron": "^29.0.0",
+    "electron-builder": "^24.13.3",
+    "lucide-react": "^0.424.0",
+    "postcss": "^8.4.41",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4",
+    "vite": "^5.2.0",
+    "wait-on": "^9.0.10"
+  }
+}
