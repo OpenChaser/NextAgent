@@ -1,0 +1,47 @@
+.gitignore
+  ai_agent 1-2
+src/preload/preload.ts
+  ai_agent 1-5
+src/renderer/App.tsx
+  ai_agent 1-16
+tsconfig.main.json
+  ai_agent 1-14
+pnpm-lock.yaml
+  ai_agent 1-4124
+src/renderer/index.css
+  ai_agent 1-33
+src/renderer/components/Sidebar.tsx
+  ai_agent 1-108
+tailwind.config.js
+  ai_agent 1-23
+pnpm-workspace.yaml
+  ai_agent 1-3
+postcss.config.js
+  ai_agent 1-6
+tsconfig.node.json
+  ai_agent 1-11
+src/renderer/main.tsx
+  ai_agent 1-10
+vite.config.ts
+  ai_agent 1-16
+src/renderer/components/ChatArea.tsx
+  ai_agent 1-78
+tsconfig.json
+  ai_agent 1-22
+package.json
+  ai_agent 1-45
+README.md
+  ai_agent 3-145
+index.html
+  ai_agent 1-13
+package-lock.json
+  ai_agent 1-2616
+src/main/main.ts
+  ai_agent 1-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "2.1.1443",
+  "base_commit_sha": "fa59e02289a9d72044102961b9f98ac0a8bf833a",
+  "prompts": {}
+}
