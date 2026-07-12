@@ -1,5 +1,8 @@
 import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import path from 'path'
+import fs from 'fs'
+import os from 'os'
+import OpenAI from 'openai'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
@@ -128,6 +131,169 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('get-app-version', () => {
   return app.getVersion()
+})
+
+interface ModelConfig {
+  name: string
+  max_input_tokens?: number
+}
+
+interface Model {
+  id: string
+  name: string
+  provider: string
+  url: string
+  key: string
+  models: ModelConfig[]
+}
+
+let modelsCache: Model[] | null = null
+
+function getModelsFilePath(): string {
+  const homeDir = os.homedir()
+  return path.join(homeDir, '.nextagent', 'models.json')
+}
+
+function getDefaultModelsFilePath(): string {
+  if (app.isPackaged) {
+    return path.join(__dirname, '../data/model.json')
+  } else {
+    return path.join(__dirname, '../../src/data/model.json')
+  }
+}
+
+function ensureModelsFile(): void {
+  const filePath = getModelsFilePath()
+  if (!fs.existsSync(filePath)) {
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    const defaultFilePath = getDefaultModelsFilePath()
+    try {
+      if (fs.existsSync(defaultFilePath)) {
+        fs.copyFileSync(defaultFilePath, filePath)
+      } else {
+        const defaultModels: Model[] = [
+          { id: 'deepseek-chat', name: 'DeepSeek', provider: 'deepseek', url: 'https://api.deepseek.com', key: '', models: [{ name: 'deepseek-v4-flash', max_input_tokens: 65536 }, { name: 'deepseek-v4-pro', max_input_tokens: 131072 }] },
+        ]
+        fs.writeFileSync(filePath, JSON.stringify(defaultModels, null, 2), 'utf-8')
+      }
+    } catch (error) {
+      console.error('Failed to initialize models file:', error)
+    }
+  }
+}
+
+ipcMain.handle('models:get', () => {
+  ensureModelsFile()
+  const filePath = getModelsFilePath()
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const models = JSON.parse(content) as Model[]
+    modelsCache = models
+    return models
+  } catch (error) {
+    console.error('Failed to read models file:', error)
+    return []
+  }
+})
+
+ipcMain.handle('models:add', (_event, newModel: Model) => {
+  ensureModelsFile()
+  const filePath = getModelsFilePath()
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const models = JSON.parse(content) as Model[]
+    
+    const exists = models.some((m) => m.id === newModel.id)
+    if (!exists) {
+      models.push(newModel)
+      fs.writeFileSync(filePath, JSON.stringify(models, null, 2), 'utf-8')
+      modelsCache = models
+    }
+    
+    return true
+  } catch (error) {
+    console.error('Failed to add model:', error)
+    return false
+  }
+})
+
+interface ChatMessageParams {
+  message: string
+  model: string
+}
+
+interface ChatUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+}
+
+interface ChatResponse {
+  content: string
+  usage?: ChatUsage
+  max_input_tokens?: number
+}
+
+ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<ChatResponse> => {
+  const { message, model } = params
+
+  console.log(`[Chat] Sending message to ${model}: ${message}`)
+
+  // 从 models.json 加载配置，找到对应的 provider
+  ensureModelsFile()
+  const filePath = getModelsFilePath()
+  let providers: Model[] = []
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    providers = JSON.parse(content) as Model[]
+  } catch (error) {
+    console.error('Failed to read models file:', error)
+    return { content: '错误：无法读取模型配置文件' }
+  }
+
+  // 找到包含该模型的 provider
+  const provider = providers.find((p) => p.models.some((m) => m.name === model))
+  if (!provider) {
+    return { content: `错误：未找到模型 "${model}" 对应的配置` }
+  }
+
+  const modelConfig = provider.models.find((m) => m.name === model)
+
+  if (!provider.key) {
+    return { content: `错误：模型提供商 "${provider.name}" 未配置 API Key，请在模型配置中填写` }
+  }
+
+  try {
+    const client = new OpenAI({
+      baseURL: provider.url,
+      apiKey: provider.key,
+    })
+
+    const completion = await client.chat.completions.create({
+      model: model,
+      messages: [{ role: 'user', content: message }],
+    })
+
+    const response = completion.choices[0]?.message?.content || '（空回复）'
+    const usage = completion.usage
+      ? {
+          prompt_tokens: completion.usage.prompt_tokens,
+          completion_tokens: completion.usage.completion_tokens,
+          total_tokens: completion.usage.total_tokens,
+        }
+      : undefined
+
+    return { content: response, usage, max_input_tokens: modelConfig?.max_input_tokens }
+  } catch (error) {
+    console.error('OpenAI API call failed:', error)
+    if (error instanceof Error) {
+      return { content: `API 调用失败：${error.message}` }
+    }
+    return { content: 'API 调用失败：未知错误' }
+  }
 })
 
 process.on('uncaughtException', (err) => {

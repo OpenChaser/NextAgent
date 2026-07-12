@@ -1,0 +1,13 @@
+[
+  {
+    "id": "deepseek-chat",
+    "name": "DeepSeek",
+    "provider": "deepseek",
+    "url": "https://api.deepseek.com",
+    "key": "",
+    "models": [
+      { "name": "deepseek-v4-flash", "max_input_tokens": 1000000  },
+      { "name": "deepseek-v4-pro", "max_input_tokens": 1000000 }
+    ]
+  }
+]

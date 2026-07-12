@@ -22,8 +22,29 @@
     "workspace",
     "assistant"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "baiguochao",
+  "license": "MIT",
+  "build": {
+    "appId": "com.nextagent.app",
+    "productName": "NextAgent",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/main/**",
+      "dist/preload/**",
+      "dist/renderer/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
@@ -41,5 +62,8 @@
     "typescript": "^5.5.4",
     "vite": "^5.2.0",
     "wait-on": "^9.0.10"
+  },
+  "dependencies": {
+    "openai": "^4.57.0"
   }
 }

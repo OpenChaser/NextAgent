@@ -1,0 +1,1 @@
+1、npm安装时使用https://registry.npmmirror.com国内mirror
