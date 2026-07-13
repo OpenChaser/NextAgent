@@ -30,39 +30,63 @@
 
 ### 前置条件
 
-- Node.js >= 18.x
-- npm >= 9.x
+- Node.js >= 20.x
+- pnpm >= 9.x
 
 ### 安装依赖
 
 ```bash
-pnpm install --registry=https://registry.npmmirror.com
-pnpm approve-builds
-
+pnpm install
 ```
 
-> **注意**：由于依赖版本冲突，必须使用 `--legacy-peer-deps` 标志。
+> **注意**：本项目 [pnpm-workspace.yaml](pnpm-workspace.yaml) 中设置了 `allowBuilds: electron: false`，会跳过 Electron 二进制的下载。安装完成后请确认 `node_modules/electron/dist/electron.exe` 是否存在；若缺失，需手动触发一次下载：
+> ```powershell
+> $env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
+> node node_modules/electron/install.js
+> ```
 
 ### 开发模式
 
 ```bash
-npm run start
+pnpm start
 ```
 
-这将同时启动 Vite 开发服务器和 Electron 应用。
+这将通过 `concurrently` 同时启动 Vite 开发服务器（默认 `http://localhost:5173`）和 Electron 应用，并等待 dev server 就绪后再加载窗口，同时自动打开 DevTools。
+
+### 类型检查
+
+```bash
+pnpm run typecheck
+```
+
+分别对主进程（`tsconfig.main.json`）和渲染进程（`tsconfig.json`）做完整类型检查，不产出文件。这是上库门禁的第一道关卡，弥补了 Vite 构建时 esbuild 不校验渲染进程类型的缺口。
 
 ### 构建生产版本
 
 ```bash
-npm run build
+pnpm run build
+```
+
+该命令依次执行：
+- `tsc --project tsconfig.main.json` — 将主进程 TS 编译到 `dist/main/`
+- `vite build` — 打包渲染进程到 `dist/renderer/`
+
+产物布局：
+```
+dist/
+├── main/        # Electron 主进程
+├── preload/     # preload 脚本
+└── renderer/    # 前端页面资源（index.html + assets）
 ```
 
 ### 打包应用
 
 ```bash
-npm run pack    # 仅打包，不生成安装包
-npm run dist    # 生成安装包
+pnpm run pack    # 仅打包，不生成安装包
+pnpm run dist    # 生成安装包（.exe / nsis 安装器）
 ```
+
+输出目录为 `release/`，配置见 [package.json](package.json) 的 `build` 段。
 
 ## 项目结构
 
@@ -85,12 +109,29 @@ src/
 
 | 命令 | 描述 |
 |------|------|
-| `npm run dev` | 启动 Vite 开发服务器 |
-| `npm run build` | 构建生产版本 |
-| `npm run electron` | 启动 Electron 应用 |
-| `npm run start` | 同时启动开发服务器和 Electron |
-| `npm run pack` | 打包应用（不生成安装包） |
-| `npm run dist` | 生成安装包 |
+| `pnpm run dev` | 启动 Vite 开发服务器 |
+| `pnpm run typecheck` | 对主进程和渲染进程做完整类型检查（不产文件） |
+| `pnpm run build` | 编译主进程 + 打包渲染进程，产出 `dist/` |
+| `pnpm run electron` | 启动 Electron 应用（加载 dev server 或已构建产物） |
+| `pnpm start` | 同时启动开发服务器和 Electron（开发模式） |
+| `pnpm run pack` | 打包应用（不生成安装包） |
+| `pnpm run dist` | 生成安装包（.exe / nsis 安装器） |
+
+## CI 门禁
+
+项目通过 GitHub Actions（[.github/workflows/build.yml](.github/workflows/build.yml)）对上库代码做编译门禁校验。当向 `main`/`master` 分支 `push` 或提交 `pull_request` 时自动触发，依次执行：
+
+1. `pnpm install --frozen-lockfile` — 严格按 lockfile 安装依赖
+2. `pnpm run typecheck` — 全仓类型检查
+3. `pnpm run build` — 编译主进程 + 打包渲染进程
+
+任一步骤失败，本次提交/PR 会被标记为 ❌，从而挡住上库。`concurrency` 配置还会自动取消同分支旧的运行以节省 CI 资源。
+
+## 典型工作流
+
+- **日常开发**：`pnpm start`（边改边热更新）
+- **上库前自检**：`pnpm run typecheck` + `pnpm run build`（与 GitHub 门禁一致）
+- **发布/分发**：`pnpm run dist`
 
 ## 开发指南
 
@@ -110,34 +151,32 @@ src/
 
 ### Electron 安装失败
 
-如果遇到 `Electron failed to install correctly` 错误，请尝试以下步骤：
+如果遇到 `Electron failed to install correctly` 错误，通常是因为 [pnpm-workspace.yaml](pnpm-workspace.yaml) 中 `allowBuilds: electron: false` 跳过了二进制下载，导致 `node_modules/electron/dist/electron.exe` 缺失。重新触发下载即可：
 
-```bash
-# 删除现有 Electron 安装
-rm -rf node_modules/electron
-
-# 重新安装
-npm install electron --legacy-peer-deps
+```powershell
+# 使用淘宝镜像（Windows PowerShell）
+$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
+node node_modules/electron/install.js
 ```
 
-如果网络环境受限，可以设置 Electron 的镜像源：
-
 ```bash
-# 使用淘宝镜像（Windows）
-set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-
 # 使用淘宝镜像（Linux/macOS）
 export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-
-npm install electron --legacy-peer-deps
+node node_modules/electron/install.js
 ```
 
-### 依赖冲突
+### 端口 5173 被占用
 
-如果遇到依赖解析错误，使用 `--legacy-peer-deps` 标志：
+启动时若提示 `Port 5173 is already in use`，说明有遗留的 Vite dev server 进程。先释放端口再重新启动：
+
+```powershell
+# Windows PowerShell：查找并结束占用 5173 的进程
+Get-NetTCPConnection -LocalPort 5173 | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force }
+```
 
 ```bash
-npm install --legacy-peer-deps
+# Linux/macOS
+lsof -ti:5173 | xargs kill -9
 ```
 
 ## 许可证
