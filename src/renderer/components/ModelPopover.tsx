@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Maximize2, Sparkles, Zap, Check, Settings } from 'lucide-react'
+import { Search, Sparkles, Zap, Check, Settings } from 'lucide-react'
 
 interface ModelPopoverProps {
   selectedModel: string
@@ -44,7 +44,6 @@ function getProviderIcon(provider: string) {
 
 export function ModelPopover({ selectedModel, onSelectModel, onConfigureClick }: ModelPopoverProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [isMaxMode, setIsMaxMode] = useState(false)
   const [providers, setProviders] = useState<Model[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -75,25 +74,6 @@ export function ModelPopover({ selectedModel, onSelectModel, onConfigureClick }:
 
   return (
     <div className="w-[280px]">
-      <div className="flex items-center justify-between p-3 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <Maximize2 className="w-4 h-4 text-gray-600" />
-          <span className="text-sm font-medium text-gray-700">Max 模式</span>
-        </div>
-        <button
-          onClick={() => setIsMaxMode(!isMaxMode)}
-          className={`relative w-11 h-6 rounded-full transition-colors ${
-            isMaxMode ? 'bg-green-500' : 'bg-gray-300'
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-              isMaxMode ? 'translate-x-5' : ''
-            }`}
-          />
-        </button>
-      </div>
-
       <div className="relative p-3">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
