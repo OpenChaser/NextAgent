@@ -9,10 +9,19 @@ interface ChatUsage {
   total_tokens: number
 }
 
-interface ChatResponse {
-  content: string
+interface ToolCallRecord {
+  name: string
+  arguments: string
+  result: string
+}
+
+interface ChatDoneData {
   usage?: ChatUsage
   max_input_tokens?: number
+}
+
+interface ChatErrorData {
+  message: string
 }
 
 interface ModelConfig {
@@ -31,13 +40,16 @@ interface Model {
 
 interface ElectronAPI {
   getAppVersion: () => Promise<string>
-  sendChatMessage: (params: SendChatMessageParams) => Promise<ChatResponse>
+  sendChatMessage: (params: SendChatMessageParams) => void
+  onChatChunk: (callback: (data: { content: string }) => void) => void
+  onChatToolCall: (callback: (data: ToolCallRecord) => void) => void
+  onChatDone: (callback: (data: ChatDoneData) => void) => void
+  onChatError: (callback: (data: ChatErrorData) => void) => void
+  removeChatListeners: () => void
   getModels: () => Promise<Model[]>
   addModel: (model: Model) => Promise<boolean>
 }
 
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI
-  }
+interface Window {
+  electronAPI: ElectronAPI
 }

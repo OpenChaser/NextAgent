@@ -19,6 +19,7 @@ interface Message {
   role: 'user' | 'assistant'
   model?: string
   usage?: ChatUsage
+  tool_calls?: ToolCallRecord[]
 }
 
 export function ChatArea() {
@@ -59,42 +60,64 @@ export function ChatArea() {
     setIsSending(true)
     closeAllPopovers()
 
-    try {
-      const response = await window.electronAPI.sendChatMessage({
-        message: userMessage.content,
-        model: selectedModel,
-      })
-
-      const assistantMessage: Message = {
-        id: `msg-${Date.now()}-resp`,
-        content: response.content,
-        role: 'assistant',
-        model: selectedModel,
-        usage: response.usage,
-      }
-
-      setMessages((prev) => [...prev, assistantMessage])
-
-      if (response.usage) {
-        setLastPromptTokens(response.usage.prompt_tokens)
-        setLastCompletionTokens(response.usage.completion_tokens)
-        setTotalPromptTokens((prev) => prev + response.usage!.prompt_tokens)
-        setTotalCompletionTokens((prev) => prev + response.usage!.completion_tokens)
-      }
-      if (response.max_input_tokens) {
-        setMaxInputTokens(response.max_input_tokens)
-      }
-    } catch (error) {
-      const errorMessage: Message = {
-        id: `msg-${Date.now()}-error`,
-        content: `发送失败：${error instanceof Error ? error.message : '未知错误'}`,
-        role: 'assistant',
-        model: selectedModel,
-      }
-      setMessages((prev) => [...prev, errorMessage])
-    } finally {
-      setIsSending(false)
+    const assistantId = `msg-${Date.now()}-resp`
+    const assistantMessage: Message = {
+      id: assistantId,
+      content: '',
+      role: 'assistant',
+      model: selectedModel,
+      tool_calls: [],
     }
+    setMessages((prev) => [...prev, assistantMessage])
+
+    // 设置流式事件监听
+    window.electronAPI.onChatChunk((data) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, content: m.content + data.content } : m
+        )
+      )
+    })
+
+    window.electronAPI.onChatToolCall((data) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, tool_calls: [...(m.tool_calls || []), data] }
+            : m
+        )
+      )
+    })
+
+    window.electronAPI.onChatDone((data) => {
+      if (data.usage) {
+        setLastPromptTokens(data.usage.prompt_tokens)
+        setLastCompletionTokens(data.usage.completion_tokens)
+        setTotalPromptTokens((prev) => prev + data.usage!.prompt_tokens)
+        setTotalCompletionTokens((prev) => prev + data.usage!.completion_tokens)
+      }
+      if (data.max_input_tokens) {
+        setMaxInputTokens(data.max_input_tokens)
+      }
+      setIsSending(false)
+      window.electronAPI.removeChatListeners()
+    })
+
+    window.electronAPI.onChatError((data) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, content: `发送失败：${data.message}` } : m
+        )
+      )
+      setIsSending(false)
+      window.electronAPI.removeChatListeners()
+    })
+
+    // 发送消息（流式，无需等待返回值）
+    window.electronAPI.sendChatMessage({
+      message: userMessage.content,
+      model: selectedModel,
+    })
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -181,6 +204,17 @@ export function ChatArea() {
                   {msg.content}
                 </p>
               </div>
+              {msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {msg.tool_calls.map((tc, idx) => (
+                    <div key={idx} className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-2">
+                      <div className="font-medium text-gray-600">🔧 {tc.name}</div>
+                      <div className="text-gray-400 mt-1">参数: {tc.arguments.length > 200 ? tc.arguments.substring(0, 200) + '...' : tc.arguments}</div>
+                      <div className="text-gray-400 mt-1">结果: {tc.result.length > 200 ? tc.result.substring(0, 200) + '...' : tc.result}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {msg.role === 'assistant' && msg.model && (
                 <span className="text-xs text-gray-400 mt-1 ml-1">
                   {msg.model}

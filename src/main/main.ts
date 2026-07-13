@@ -3,6 +3,8 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import OpenAI from 'openai'
+import { getToolDefinitions, executeTool } from './tools'
+import { showAbout } from './about'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
@@ -40,7 +42,7 @@ function createWindow() {
     mainWindow = null
   })
 
-  mainWindow.webContents.on('render-process-gone', (event, details) => {
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('Render process crashed:', details)
   })
 
@@ -77,40 +79,6 @@ const menuTemplate: Electron.MenuItemConstructorOptions[] = [
   },
 ]
 
-function showAbout() {
-  const aboutWindow = new BrowserWindow({
-    width: 400,
-    height: 300,
-    frame: true,
-    title: '关于 NextAgent',
-    resizable: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false,
-    },
-  })
-
-  aboutWindow.loadURL(`data:text/html;charset=utf-8,
-    <html>
-      <head>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 40px; background: #f5f5f5; }
-          h1 { color: #333; }
-          p { color: #666; }
-          .version { font-size: 14px; color: #999; }
-        </style>
-      </head>
-      <body>
-        <h1>NextAgent</h1>
-        <p>AI 工作助手</p>
-        <p class="version">v1.0.0</p>
-        <p>基于 Electron + React 构建</p>
-      </body>
-    </html>
-  `)
-}
-
 app.whenReady().then(() => {
   const menu = Menu.buildFromTemplate(menuTemplate)
   Menu.setApplicationMenu(menu)
@@ -146,8 +114,6 @@ interface Model {
   key: string
   models: ModelConfig[]
 }
-
-let modelsCache: Model[] | null = null
 
 function getModelsFilePath(): string {
   const homeDir = os.homedir()
@@ -191,7 +157,6 @@ ipcMain.handle('models:get', () => {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
     const models = JSON.parse(content) as Model[]
-    modelsCache = models
     return models
   } catch (error) {
     console.error('Failed to read models file:', error)
@@ -210,7 +175,6 @@ ipcMain.handle('models:add', (_event, newModel: Model) => {
     if (!exists) {
       models.push(newModel)
       fs.writeFileSync(filePath, JSON.stringify(models, null, 2), 'utf-8')
-      modelsCache = models
     }
     
     return true
@@ -225,22 +189,11 @@ interface ChatMessageParams {
   model: string
 }
 
-interface ChatUsage {
-  prompt_tokens: number
-  completion_tokens: number
-  total_tokens: number
-}
-
-interface ChatResponse {
-  content: string
-  usage?: ChatUsage
-  max_input_tokens?: number
-}
-
-ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<ChatResponse> => {
+ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
   const { message, model } = params
+  const win = event.sender
 
-  console.log(`[Chat] Sending message to ${model}: ${message}`)
+  console.log(`[Chat] Streaming message to ${model}: ${message}`)
 
   // 从 models.json 加载配置，找到对应的 provider
   ensureModelsFile()
@@ -251,19 +204,22 @@ ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<C
     providers = JSON.parse(content) as Model[]
   } catch (error) {
     console.error('Failed to read models file:', error)
-    return { content: '错误：无法读取模型配置文件' }
+    win.send('chat:error', { message: '错误：无法读取模型配置文件' })
+    return
   }
 
   // 找到包含该模型的 provider
   const provider = providers.find((p) => p.models.some((m) => m.name === model))
   if (!provider) {
-    return { content: `错误：未找到模型 "${model}" 对应的配置` }
+    win.send('chat:error', { message: `错误：未找到模型 "${model}" 对应的配置` })
+    return
   }
 
   const modelConfig = provider.models.find((m) => m.name === model)
 
   if (!provider.key) {
-    return { content: `错误：模型提供商 "${provider.name}" 未配置 API Key，请在模型配置中填写` }
+    win.send('chat:error', { message: `错误：模型提供商 "${provider.name}" 未配置 API Key，请在模型配置中填写` })
+    return
   }
 
   try {
@@ -272,27 +228,126 @@ ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<C
       apiKey: provider.key,
     })
 
-    const completion = await client.chat.completions.create({
-      model: model,
-      messages: [{ role: 'user', content: message }],
-    })
+    const tools = getToolDefinitions()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages: any[] = [{ role: 'user', content: message }]
 
-    const response = completion.choices[0]?.message?.content || '（空回复）'
-    const usage = completion.usage
-      ? {
-          prompt_tokens: completion.usage.prompt_tokens,
-          completion_tokens: completion.usage.completion_tokens,
-          total_tokens: completion.usage.total_tokens,
+    let totalPromptTokens = 0
+    let totalCompletionTokens = 0
+    let totalTokens = 0
+
+    const MAX_ROUNDS = 10
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const stream = await client.chat.completions.create({
+        model: model,
+        messages: messages,
+        tools: tools,
+        stream: true,
+        stream_options: { include_usage: true },
+      })
+
+      let contentBuffer = ''
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolCallsBuffer = new Map<number, { id: string; name: string; arguments: string }>()
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta
+
+        // 流式文本内容
+        if (delta?.content) {
+          contentBuffer += delta.content
+          win.send('chat:chunk', { content: delta.content })
         }
-      : undefined
 
-    return { content: response, usage, max_input_tokens: modelConfig?.max_input_tokens }
+        // 流式 tool_calls 分片累积
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index
+            if (!toolCallsBuffer.has(idx)) {
+              toolCallsBuffer.set(idx, { id: tc.id || '', name: '', arguments: '' })
+            }
+            const buf = toolCallsBuffer.get(idx)!
+            if (tc.function?.name) buf.name = tc.function.name
+            if (tc.function?.arguments) buf.arguments += tc.function.arguments
+          }
+        }
+
+        // 累计 token
+        if (chunk.usage) {
+          totalPromptTokens += chunk.usage.prompt_tokens
+          totalCompletionTokens += chunk.usage.completion_tokens
+          totalTokens += chunk.usage.total_tokens
+        }
+      }
+
+      // 检查是否有 tool_calls
+      if (toolCallsBuffer.size > 0) {
+        const toolCalls = Array.from(toolCallsBuffer.values())
+
+        // 将 assistant 消息加入历史
+        messages.push({
+          role: 'assistant',
+          content: contentBuffer,
+          tool_calls: toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        })
+
+        // 执行所有工具
+        for (const tc of toolCalls) {
+          let toolArgs: Record<string, unknown> = {}
+          try {
+            toolArgs = JSON.parse(tc.arguments)
+          } catch {
+            toolArgs = {}
+          }
+          console.log(`[Tool] Executing ${tc.name} with args:`, toolArgs)
+          const result = await executeTool(tc.name, toolArgs)
+
+          win.send('chat:tool_call', {
+            name: tc.name,
+            arguments: tc.arguments,
+            result: result,
+          })
+
+          messages.push({
+            role: 'tool',
+            content: result,
+            tool_call_id: tc.id,
+          })
+        }
+
+        continue
+      }
+
+      // 没有 tool_calls，流式完成
+      win.send('chat:done', {
+        usage: {
+          prompt_tokens: totalPromptTokens,
+          completion_tokens: totalCompletionTokens,
+          total_tokens: totalTokens,
+        },
+        max_input_tokens: modelConfig?.max_input_tokens,
+      })
+      return
+    }
+
+    // 达到最大轮次
+    win.send('chat:done', {
+      usage: {
+        prompt_tokens: totalPromptTokens,
+        completion_tokens: totalCompletionTokens,
+        total_tokens: totalTokens,
+      },
+      max_input_tokens: modelConfig?.max_input_tokens,
+    })
   } catch (error) {
     console.error('OpenAI API call failed:', error)
-    if (error instanceof Error) {
-      return { content: `API 调用失败：${error.message}` }
-    }
-    return { content: 'API 调用失败：未知错误' }
+    win.send('chat:error', {
+      message: error instanceof Error ? error.message : '未知错误',
+    })
   }
 })
 

@@ -1,20 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Search, Maximize2, Sparkles, Zap, Check, Settings } from 'lucide-react'
 
-interface ModelConfig {
-  name: string
-  max_input_tokens: number
-}
-
-interface Model {
-  id: string
-  name: string
-  provider: string
-  url: string
-  key: string
-  models: ModelConfig[]
-}
-
 interface ModelPopoverProps {
   selectedModel: string
   onSelectModel: (model: string) => void
