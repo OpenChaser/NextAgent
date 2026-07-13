@@ -267,13 +267,6 @@ export function ChatArea() {
               </button>
 
               <button
-                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                disabled={isSending}
-              >
-                <Lock className="w-4 h-4 text-gray-500" />
-              </button>
-
-              <button
                 onClick={handleSend}
                 className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!message.trim() || isSending}
