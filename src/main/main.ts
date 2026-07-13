@@ -4,6 +4,7 @@ import fs from 'fs'
 import os from 'os'
 import OpenAI from 'openai'
 import { getToolDefinitions, executeTool } from './tools'
+import { showAbout } from './about'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
@@ -77,40 +78,6 @@ const menuTemplate: Electron.MenuItemConstructorOptions[] = [
     ],
   },
 ]
-
-function showAbout() {
-  const aboutWindow = new BrowserWindow({
-    width: 400,
-    height: 300,
-    frame: true,
-    title: '关于 NextAgent',
-    resizable: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false,
-    },
-  })
-
-  aboutWindow.loadURL(`data:text/html;charset=utf-8,
-    <html>
-      <head>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 40px; background: #f5f5f5; }
-          h1 { color: #333; }
-          p { color: #666; }
-          .version { font-size: 14px; color: #999; }
-        </style>
-      </head>
-      <body>
-        <h1>NextAgent</h1>
-        <p>AI 工作助手</p>
-        <p class="version">v1.0.0</p>
-        <p>基于 Electron + React 构建</p>
-      </body>
-    </html>
-  `)
-}
 
 app.whenReady().then(() => {
   const menu = Menu.buildFromTemplate(menuTemplate)
