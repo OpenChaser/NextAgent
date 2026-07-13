@@ -42,3 +42,30 @@ node node_modules/electron/install.js
 export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 node node_modules/electron/install.js
 ```
+
+## PR 创建
+
+本项目代码托管于 GitHub，使用 GitHub CLI（`gh`）直接创建 Pull Request，无需在网页手动操作，避免反复切换上下文。
+
+### 前置条件
+
+- 已安装 `gh` 并完成认证（`gh auth login`）。
+- feature 分支已推送到远程（`git push -u origin <branch>`）。
+
+### 创建 PR
+
+以 feature 分支合入 `dev` 为例（与项目 feature→dev 开发流一致）：
+
+```bash
+gh pr create \
+  --base dev \
+  --head feature/<分支名> \
+  --title "<简洁标题>" \
+  --body "<PR 描述，可用多行字符串或 --body-file 指定文件>"
+```
+
+### 优势
+
+- 命令行一键完成，无需打开浏览器。
+- 标题、描述可复用模板，减少手动填写。
+- 避免因「分支已推送但 PR 未建」造成的流程断点。
