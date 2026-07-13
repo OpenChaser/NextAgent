@@ -15,11 +15,13 @@ interface ToolCallRecord {
   result: string
 }
 
-interface ChatResponse {
-  content: string
+interface ChatDoneData {
   usage?: ChatUsage
   max_input_tokens?: number
-  tool_calls?: ToolCallRecord[]
+}
+
+interface ChatErrorData {
+  message: string
 }
 
 interface ModelConfig {
@@ -38,7 +40,12 @@ interface Model {
 
 interface ElectronAPI {
   getAppVersion: () => Promise<string>
-  sendChatMessage: (params: SendChatMessageParams) => Promise<ChatResponse>
+  sendChatMessage: (params: SendChatMessageParams) => void
+  onChatChunk: (callback: (data: { content: string }) => void) => void
+  onChatToolCall: (callback: (data: ToolCallRecord) => void) => void
+  onChatDone: (callback: (data: ChatDoneData) => void) => void
+  onChatError: (callback: (data: ChatErrorData) => void) => void
+  removeChatListeners: () => void
   getModels: () => Promise<Model[]>
   addModel: (model: Model) => Promise<boolean>
 }

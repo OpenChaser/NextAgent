@@ -238,17 +238,11 @@ interface ToolCallRecord {
   result: string
 }
 
-interface ChatResponse {
-  content: string
-  usage?: ChatUsage
-  max_input_tokens?: number
-  tool_calls?: ToolCallRecord[]
-}
-
-ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<ChatResponse> => {
+ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
   const { message, model } = params
+  const win = event.sender
 
-  console.log(`[Chat] Sending message to ${model}: ${message}`)
+  console.log(`[Chat] Streaming message to ${model}: ${message}`)
 
   // 从 models.json 加载配置，找到对应的 provider
   ensureModelsFile()
@@ -259,19 +253,22 @@ ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<C
     providers = JSON.parse(content) as Model[]
   } catch (error) {
     console.error('Failed to read models file:', error)
-    return { content: '错误：无法读取模型配置文件' }
+    win.send('chat:error', { message: '错误：无法读取模型配置文件' })
+    return
   }
 
   // 找到包含该模型的 provider
   const provider = providers.find((p) => p.models.some((m) => m.name === model))
   if (!provider) {
-    return { content: `错误：未找到模型 "${model}" 对应的配置` }
+    win.send('chat:error', { message: `错误：未找到模型 "${model}" 对应的配置` })
+    return
   }
 
   const modelConfig = provider.models.find((m) => m.name === model)
 
   if (!provider.key) {
-    return { content: `错误：模型提供商 "${provider.name}" 未配置 API Key，请在模型配置中填写` }
+    win.send('chat:error', { message: `错误：模型提供商 "${provider.name}" 未配置 API Key，请在模型配置中填写` })
+    return
   }
 
   try {
@@ -283,7 +280,6 @@ ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<C
     const tools = getToolDefinitions()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const messages: any[] = [{ role: 'user', content: message }]
-    const toolCallRecords: ToolCallRecord[] = []
 
     let totalPromptTokens = 0
     let totalCompletionTokens = 0
@@ -291,86 +287,116 @@ ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<C
 
     const MAX_ROUNDS = 10
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      const completion = await client.chat.completions.create({
+      const stream = await client.chat.completions.create({
         model: model,
         messages: messages,
         tools: tools,
+        stream: true,
+        stream_options: { include_usage: true },
       })
 
-      const choice = completion.choices[0]
+      let contentBuffer = ''
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolCallsBuffer = new Map<number, { id: string; name: string; arguments: string }>()
 
-      // 累计 token
-      if (completion.usage) {
-        totalPromptTokens += completion.usage.prompt_tokens
-        totalCompletionTokens += completion.usage.completion_tokens
-        totalTokens += completion.usage.total_tokens
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta
+
+        // 流式文本内容
+        if (delta?.content) {
+          contentBuffer += delta.content
+          win.send('chat:chunk', { content: delta.content })
+        }
+
+        // 流式 tool_calls 分片累积
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index
+            if (!toolCallsBuffer.has(idx)) {
+              toolCallsBuffer.set(idx, { id: tc.id || '', name: '', arguments: '' })
+            }
+            const buf = toolCallsBuffer.get(idx)!
+            if (tc.function?.name) buf.name = tc.function.name
+            if (tc.function?.arguments) buf.arguments += tc.function.arguments
+          }
+        }
+
+        // 累计 token
+        if (chunk.usage) {
+          totalPromptTokens += chunk.usage.prompt_tokens
+          totalCompletionTokens += chunk.usage.completion_tokens
+          totalTokens += chunk.usage.total_tokens
+        }
       }
 
       // 检查是否有 tool_calls
-      if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
-        // 将 assistant 消息加入历史
-        messages.push(choice.message)
+      if (toolCallsBuffer.size > 0) {
+        const toolCalls = Array.from(toolCallsBuffer.values())
 
-        // 执行所有 tool_calls
-        for (const toolCall of choice.message.tool_calls) {
-          const toolName = toolCall.function.name
+        // 将 assistant 消息加入历史
+        messages.push({
+          role: 'assistant',
+          content: contentBuffer,
+          tool_calls: toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        })
+
+        // 执行所有工具
+        for (const tc of toolCalls) {
           let toolArgs: Record<string, unknown> = {}
           try {
-            toolArgs = JSON.parse(toolCall.function.arguments)
+            toolArgs = JSON.parse(tc.arguments)
           } catch {
             toolArgs = {}
           }
-          console.log(`[Tool] Executing ${toolName} with args:`, toolArgs)
-          const result = await executeTool(toolName, toolArgs)
+          console.log(`[Tool] Executing ${tc.name} with args:`, toolArgs)
+          const result = await executeTool(tc.name, toolArgs)
 
-          toolCallRecords.push({
-            name: toolName,
-            arguments: toolCall.function.arguments,
+          win.send('chat:tool_call', {
+            name: tc.name,
+            arguments: tc.arguments,
             result: result,
           })
 
-          // 将工具结果加入消息历史
           messages.push({
             role: 'tool',
             content: result,
-            tool_call_id: toolCall.id,
+            tool_call_id: tc.id,
           })
         }
 
         continue
       }
 
-      // 没有更多 tool_calls，返回最终结果
-      const response = choice?.message?.content || '（空回复）'
-      return {
-        content: response,
+      // 没有 tool_calls，流式完成
+      win.send('chat:done', {
         usage: {
           prompt_tokens: totalPromptTokens,
           completion_tokens: totalCompletionTokens,
           total_tokens: totalTokens,
         },
         max_input_tokens: modelConfig?.max_input_tokens,
-        tool_calls: toolCallRecords.length > 0 ? toolCallRecords : undefined,
-      }
+      })
+      return
     }
 
     // 达到最大轮次
-    return {
-      content: '（达到最大工具调用轮次限制）',
+    win.send('chat:done', {
       usage: {
         prompt_tokens: totalPromptTokens,
         completion_tokens: totalCompletionTokens,
         total_tokens: totalTokens,
       },
       max_input_tokens: modelConfig?.max_input_tokens,
-      tool_calls: toolCallRecords.length > 0 ? toolCallRecords : undefined,
-    }
+    })
   } catch (error) {
     console.error('OpenAI API call failed:', error)
-    if (error instanceof Error) {
-      return { content: `API 调用失败：${error.message}` }
-    }
-    return { content: 'API 调用失败：未知错误' }
+    win.send('chat:error', {
+      message: error instanceof Error ? error.message : '未知错误',
+    })
   }
 })
 
