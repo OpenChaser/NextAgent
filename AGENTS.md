@@ -61,13 +61,18 @@ gh pr create \
   --base dev \
   --head feature/<分支名> \
   --title "<简洁标题>" \
-  --body "<PR 描述，可用多行字符串或 --body-file 指定文件>" \
-  --delete-branch
+  --body "<PR 描述，可用多行字符串或 --body-file 指定文件>"
 ```
 
-### 合并后删除源分支
+### 合并并删除源分支
 
-`--delete-branch` 参数使 PR 合并后自动删除远程与本地 feature 分支，避免分支堆积。项目遵循「一个 feature 一个 PR 一个分支，合并即清理」的轻量流程，不长期保留 feature 分支。
+PR 合并时使用 `gh pr merge --delete-branch`，合并完成后自动删除远程与本地 feature 分支，避免分支堆积：
+
+```bash
+gh pr merge <PR编号> --delete-branch
+```
+
+项目遵循「一个 feature 一个 PR 一个分支，合并即清理」的轻量流程，不长期保留 feature 分支。
 
 > 已合并的 feature 分支无需保留；如需复用同一主题，请新建分支而非复用旧分支。
 
@@ -76,4 +81,4 @@ gh pr create \
 - 命令行一键完成，无需打开浏览器。
 - 标题、描述可复用模板，减少手动填写。
 - 避免因「分支已推送但 PR 未建」造成的流程断点。
-- 合并自动删分支，仓库分支列表保持整洁。
+- 合并时删分支，仓库分支列表保持整洁。
