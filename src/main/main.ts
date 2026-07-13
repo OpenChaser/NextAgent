@@ -42,7 +42,7 @@ function createWindow() {
     mainWindow = null
   })
 
-  mainWindow.webContents.on('render-process-gone', (event, details) => {
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('Render process crashed:', details)
   })
 
@@ -115,8 +115,6 @@ interface Model {
   models: ModelConfig[]
 }
 
-let modelsCache: Model[] | null = null
-
 function getModelsFilePath(): string {
   const homeDir = os.homedir()
   return path.join(homeDir, '.nextagent', 'models.json')
@@ -159,7 +157,6 @@ ipcMain.handle('models:get', () => {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
     const models = JSON.parse(content) as Model[]
-    modelsCache = models
     return models
   } catch (error) {
     console.error('Failed to read models file:', error)
@@ -178,7 +175,6 @@ ipcMain.handle('models:add', (_event, newModel: Model) => {
     if (!exists) {
       models.push(newModel)
       fs.writeFileSync(filePath, JSON.stringify(models, null, 2), 'utf-8')
-      modelsCache = models
     }
     
     return true
@@ -191,18 +187,6 @@ ipcMain.handle('models:add', (_event, newModel: Model) => {
 interface ChatMessageParams {
   message: string
   model: string
-}
-
-interface ChatUsage {
-  prompt_tokens: number
-  completion_tokens: number
-  total_tokens: number
-}
-
-interface ToolCallRecord {
-  name: string
-  arguments: string
-  result: string
 }
 
 ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {

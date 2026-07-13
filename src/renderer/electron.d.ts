@@ -50,8 +50,6 @@ interface ElectronAPI {
   addModel: (model: Model) => Promise<boolean>
 }
 
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI
-  }
+interface Window {
+  electronAPI: ElectronAPI
 }
