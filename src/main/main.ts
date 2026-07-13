@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import OpenAI from 'openai'
+import { getToolDefinitions, executeTool } from './tools'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
@@ -231,10 +232,17 @@ interface ChatUsage {
   total_tokens: number
 }
 
+interface ToolCallRecord {
+  name: string
+  arguments: string
+  result: string
+}
+
 interface ChatResponse {
   content: string
   usage?: ChatUsage
   max_input_tokens?: number
+  tool_calls?: ToolCallRecord[]
 }
 
 ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<ChatResponse> => {
@@ -272,21 +280,91 @@ ipcMain.handle('chat:send', async (_event, params: ChatMessageParams): Promise<C
       apiKey: provider.key,
     })
 
-    const completion = await client.chat.completions.create({
-      model: model,
-      messages: [{ role: 'user', content: message }],
-    })
+    const tools = getToolDefinitions()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages: any[] = [{ role: 'user', content: message }]
+    const toolCallRecords: ToolCallRecord[] = []
 
-    const response = completion.choices[0]?.message?.content || '（空回复）'
-    const usage = completion.usage
-      ? {
-          prompt_tokens: completion.usage.prompt_tokens,
-          completion_tokens: completion.usage.completion_tokens,
-          total_tokens: completion.usage.total_tokens,
+    let totalPromptTokens = 0
+    let totalCompletionTokens = 0
+    let totalTokens = 0
+
+    const MAX_ROUNDS = 10
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const completion = await client.chat.completions.create({
+        model: model,
+        messages: messages,
+        tools: tools,
+      })
+
+      const choice = completion.choices[0]
+
+      // 累计 token
+      if (completion.usage) {
+        totalPromptTokens += completion.usage.prompt_tokens
+        totalCompletionTokens += completion.usage.completion_tokens
+        totalTokens += completion.usage.total_tokens
+      }
+
+      // 检查是否有 tool_calls
+      if (choice?.message?.tool_calls && choice.message.tool_calls.length > 0) {
+        // 将 assistant 消息加入历史
+        messages.push(choice.message)
+
+        // 执行所有 tool_calls
+        for (const toolCall of choice.message.tool_calls) {
+          const toolName = toolCall.function.name
+          let toolArgs: Record<string, unknown> = {}
+          try {
+            toolArgs = JSON.parse(toolCall.function.arguments)
+          } catch {
+            toolArgs = {}
+          }
+          console.log(`[Tool] Executing ${toolName} with args:`, toolArgs)
+          const result = await executeTool(toolName, toolArgs)
+
+          toolCallRecords.push({
+            name: toolName,
+            arguments: toolCall.function.arguments,
+            result: result,
+          })
+
+          // 将工具结果加入消息历史
+          messages.push({
+            role: 'tool',
+            content: result,
+            tool_call_id: toolCall.id,
+          })
         }
-      : undefined
 
-    return { content: response, usage, max_input_tokens: modelConfig?.max_input_tokens }
+        continue
+      }
+
+      // 没有更多 tool_calls，返回最终结果
+      const response = choice?.message?.content || '（空回复）'
+      return {
+        content: response,
+        usage: {
+          prompt_tokens: totalPromptTokens,
+          completion_tokens: totalCompletionTokens,
+          total_tokens: totalTokens,
+        },
+        max_input_tokens: modelConfig?.max_input_tokens,
+        tool_calls: toolCallRecords.length > 0 ? toolCallRecords : undefined,
+      }
+    }
+
+    // 达到最大轮次
+    return {
+      content: '（达到最大工具调用轮次限制）',
+      usage: {
+        prompt_tokens: totalPromptTokens,
+        completion_tokens: totalCompletionTokens,
+        total_tokens: totalTokens,
+      },
+      max_input_tokens: modelConfig?.max_input_tokens,
+      tool_calls: toolCallRecords.length > 0 ? toolCallRecords : undefined,
+    }
   } catch (error) {
     console.error('OpenAI API call failed:', error)
     if (error instanceof Error) {

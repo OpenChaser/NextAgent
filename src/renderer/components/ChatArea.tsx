@@ -19,6 +19,7 @@ interface Message {
   role: 'user' | 'assistant'
   model?: string
   usage?: ChatUsage
+  tool_calls?: ToolCallRecord[]
 }
 
 export function ChatArea() {
@@ -71,6 +72,7 @@ export function ChatArea() {
         role: 'assistant',
         model: selectedModel,
         usage: response.usage,
+        tool_calls: response.tool_calls,
       }
 
       setMessages((prev) => [...prev, assistantMessage])
@@ -181,6 +183,17 @@ export function ChatArea() {
                   {msg.content}
                 </p>
               </div>
+              {msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {msg.tool_calls.map((tc, idx) => (
+                    <div key={idx} className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-2">
+                      <div className="font-medium text-gray-600">🔧 {tc.name}</div>
+                      <div className="text-gray-400 mt-1">参数: {tc.arguments.length > 200 ? tc.arguments.substring(0, 200) + '...' : tc.arguments}</div>
+                      <div className="text-gray-400 mt-1">结果: {tc.result.length > 200 ? tc.result.substring(0, 200) + '...' : tc.result}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {msg.role === 'assistant' && msg.model && (
                 <span className="text-xs text-gray-400 mt-1 ml-1">
                   {msg.model}

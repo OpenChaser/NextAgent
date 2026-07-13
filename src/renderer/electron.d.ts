@@ -9,10 +9,17 @@ interface ChatUsage {
   total_tokens: number
 }
 
+interface ToolCallRecord {
+  name: string
+  arguments: string
+  result: string
+}
+
 interface ChatResponse {
   content: string
   usage?: ChatUsage
   max_input_tokens?: number
+  tool_calls?: ToolCallRecord[]
 }
 
 interface ModelConfig {
