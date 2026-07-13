@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot } from 'lucide-react'
+import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Loader2 } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
 import { PermissionPopover } from './PermissionPopover'
@@ -200,9 +200,17 @@ export function ChatArea() {
                     : 'bg-gray-100 text-gray-700 rounded-tl-sm'
                 }`}
               >
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {msg.content}
-                </p>
+                {msg.role === 'assistant' && !msg.content && (!msg.tool_calls || msg.tool_calls.length === 0) ? (
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                ) : (
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                    {msg.content}
+                  </p>
+                )}
               </div>
               {msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0 && (
                 <div className="mt-2 space-y-1">
@@ -223,20 +231,6 @@ export function ChatArea() {
             </div>
           </div>
         ))}
-        {isSending && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center flex-shrink-0">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div className="bg-gray-100 px-4 py-3 rounded-xl rounded-tl-sm">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          </div>
-        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -284,7 +278,11 @@ export function ChatArea() {
                 className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!message.trim() || isSending}
               >
-                <Send className="w-5 h-5 text-white" />
+                {isSending ? (
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5 text-white" />
+                )}
               </button>
             </div>
           </div>
