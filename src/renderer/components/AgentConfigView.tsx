@@ -194,6 +194,8 @@ export function AgentConfigView() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">最大输出 Tokens</label>
                 <input
                   type="number"
+                  min={1}
+                  max={393216}
                   value={form.maxTokens}
                   onChange={(e) => setForm({ ...form, maxTokens: Number(e.target.value) })}
                   placeholder="4096"

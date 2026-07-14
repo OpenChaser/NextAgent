@@ -13,6 +13,21 @@ process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 let mainWindow: BrowserWindow | null = null
 
+function readJsonFileSync<T>(filePath: string): T | null {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8')
+    const stripped = raw.replace(/^\uFEFF/, '').trim()
+    return JSON.parse(stripped) as T
+  } catch (error) {
+    console.error(`Failed to read/parse JSON (${filePath}):`, error)
+    return null
+  }
+}
+
+function writeJsonFileSync(filePath: string, data: unknown): void {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), { encoding: 'utf-8' })
+}
+
 function createWindow() {
   const isDev = !app.isPackaged
 
@@ -147,7 +162,7 @@ function ensureModelsFile(): void {
         const defaultModels: Model[] = [
           { id: 'deepseek-chat', name: 'DeepSeek', provider: 'deepseek', url: 'https://api.deepseek.com', key: '', models: [{ name: 'deepseek-v4-flash', max_input_tokens: 65536 }, { name: 'deepseek-v4-pro', max_input_tokens: 131072 }] },
         ]
-        fs.writeFileSync(filePath, JSON.stringify(defaultModels, null, 2), 'utf-8')
+        writeJsonFileSync(filePath, defaultModels)
       }
     } catch (error) {
       console.error('Failed to initialize models file:', error)
@@ -158,27 +173,20 @@ function ensureModelsFile(): void {
 ipcMain.handle('models:get', () => {
   ensureModelsFile()
   const filePath = getModelsFilePath()
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const models = JSON.parse(content) as Model[]
-    return models
-  } catch (error) {
-    console.error('Failed to read models file:', error)
-    return []
-  }
+  const models = readJsonFileSync<Model[]>(filePath)
+  return models ?? []
 })
 
 ipcMain.handle('models:add', (_event, newModel: Model) => {
   ensureModelsFile()
   const filePath = getModelsFilePath()
   try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const models = JSON.parse(content) as Model[]
+    const models = readJsonFileSync<Model[]>(filePath) ?? []
 
     const exists = models.some((m) => m.id === newModel.id)
     if (!exists) {
       models.push(newModel)
-      fs.writeFileSync(filePath, JSON.stringify(models, null, 2), 'utf-8')
+      writeJsonFileSync(filePath, models)
     }
 
     return true
@@ -230,7 +238,7 @@ function ensureMcpFile(): void {
       fs.mkdirSync(dir, { recursive: true })
     }
     try {
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf-8')
+      writeJsonFileSync(filePath, [])
     } catch (error) {
       console.error('Failed to initialize mcp file:', error)
     }
@@ -314,20 +322,25 @@ function ensureAgentsFile(): void {
   }
   if (!fs.existsSync(filePath)) {
     try {
-      fs.writeFileSync(filePath, JSON.stringify(getBuiltinAgents(), null, 2), 'utf-8')
+      writeJsonFileSync(filePath, getBuiltinAgents())
     } catch (error) {
       console.error('Failed to initialize agents file:', error)
     }
     return
   }
   try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const agents = JSON.parse(content) as AgentConfig[]
+    let agents = readJsonFileSync<AgentConfig[]>(filePath)
+    if (!Array.isArray(agents)) {
+      console.warn('Agents file unreadable or invalid, restoring built-in agents')
+      agents = getBuiltinAgents()
+      writeJsonFileSync(filePath, agents)
+      return
+    }
     const builtins = getBuiltinAgents()
     const missing = builtins.filter((b) => !agents.some((a) => a.id === b.id))
     if (missing.length > 0) {
       agents.push(...missing)
-      fs.writeFileSync(filePath, JSON.stringify(agents, null, 2), 'utf-8')
+      writeJsonFileSync(filePath, agents)
     }
   } catch (error) {
     console.error('Failed to ensure built-in agents:', error)
@@ -337,26 +350,22 @@ function ensureAgentsFile(): void {
 ipcMain.handle('agents:get', () => {
   ensureAgentsFile()
   const filePath = getAgentsFilePath()
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const agents = JSON.parse(content) as AgentConfig[]
-    return agents.sort((a, b) => Number(b.builtin) - Number(a.builtin))
-  } catch (error) {
-    console.error('Failed to read agents file:', error)
+  const agents = readJsonFileSync<AgentConfig[]>(filePath)
+  if (!agents) {
     return []
   }
+  return agents.sort((a, b) => Number(b.builtin) - Number(a.builtin))
 })
 
 ipcMain.handle('agents:add', (_event, newAgent: AgentConfig) => {
   ensureAgentsFile()
   const filePath = getAgentsFilePath()
   try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const agents = JSON.parse(content) as AgentConfig[]
+    const agents = readJsonFileSync<AgentConfig[]>(filePath) ?? []
     const exists = agents.some((a) => a.id === newAgent.id)
     if (!exists) {
       agents.push(newAgent)
-      fs.writeFileSync(filePath, JSON.stringify(agents, null, 2), 'utf-8')
+      writeJsonFileSync(filePath, agents)
     }
     return true
   } catch (error) {
@@ -369,12 +378,11 @@ ipcMain.handle('agents:update', (_event, updatedAgent: AgentConfig) => {
   ensureAgentsFile()
   const filePath = getAgentsFilePath()
   try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const agents = JSON.parse(content) as AgentConfig[]
+    const agents = readJsonFileSync<AgentConfig[]>(filePath) ?? []
     const index = agents.findIndex((a) => a.id === updatedAgent.id)
     if (index !== -1) {
       agents[index] = { ...agents[index], ...updatedAgent, updatedAt: Date.now() }
-      fs.writeFileSync(filePath, JSON.stringify(agents, null, 2), 'utf-8')
+      writeJsonFileSync(filePath, agents)
       return true
     }
     return false
@@ -388,14 +396,13 @@ ipcMain.handle('agents:delete', (_event, agentId: string) => {
   ensureAgentsFile()
   const filePath = getAgentsFilePath()
   try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const agents = JSON.parse(content) as AgentConfig[]
+    const agents = readJsonFileSync<AgentConfig[]>(filePath) ?? []
     const target = agents.find((a) => a.id === agentId)
     if (target?.builtin) {
       return false
     }
     const filtered = agents.filter((a) => a.id !== agentId)
-    fs.writeFileSync(filePath, JSON.stringify(filtered, null, 2), 'utf-8')
+    writeJsonFileSync(filePath, filtered)
     return true
   } catch (error) {
     console.error('Failed to delete agent:', error)
@@ -416,7 +423,7 @@ function ensurePreferencesFile(): void {
       fs.mkdirSync(dir, { recursive: true })
     }
     try {
-      fs.writeFileSync(filePath, JSON.stringify({}, null, 2), 'utf-8')
+      writeJsonFileSync(filePath, {})
     } catch (error) {
       console.error('Failed to initialize preferences file:', error)
     }
@@ -426,20 +433,14 @@ function ensurePreferencesFile(): void {
 function readMcpServers(): McpServer[] {
   ensureMcpFile()
   const filePath = getMcpFilePath()
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const servers = JSON.parse(content) as McpServer[]
-    return Array.isArray(servers) ? servers : []
-  } catch (error) {
-    console.error('Failed to read mcp file:', error)
-    return []
-  }
+  const servers = readJsonFileSync<McpServer[]>(filePath)
+  return Array.isArray(servers) ? servers : []
 }
 
 function writeMcpServers(servers: McpServer[]): void {
   ensureMcpFile()
   const filePath = getMcpFilePath()
-  fs.writeFileSync(filePath, JSON.stringify(servers, null, 2), 'utf-8')
+  writeJsonFileSync(filePath, servers)
 }
 
 ipcMain.handle('mcp:get', () => {
@@ -492,19 +493,14 @@ ipcMain.handle('mcp:toggle', (_event, id: string) => {
 
 function readPreferences(): Record<string, unknown> {
   ensurePreferencesFile()
-  try {
-    const content = fs.readFileSync(getPreferencesFilePath(), 'utf-8')
-    return JSON.parse(content) as Record<string, unknown>
-  } catch (error) {
-    console.error('Failed to read preferences file:', error)
-    return {}
-  }
+  const prefs = readJsonFileSync<Record<string, unknown>>(getPreferencesFilePath())
+  return prefs ?? {}
 }
 
 function writePreferences(prefs: Record<string, unknown>): void {
   ensurePreferencesFile()
   try {
-    fs.writeFileSync(getPreferencesFilePath(), JSON.stringify(prefs, null, 2), 'utf-8')
+    writeJsonFileSync(getPreferencesFilePath(), prefs)
   } catch (error) {
     console.error('Failed to write preferences file:', error)
   }
@@ -540,8 +536,7 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
   if (agentId) {
     ensureAgentsFile()
     try {
-      const content = fs.readFileSync(getAgentsFilePath(), 'utf-8')
-      const agents = JSON.parse(content) as AgentConfig[]
+      const agents = readJsonFileSync<AgentConfig[]>(getAgentsFilePath()) ?? []
       const agent = agents.find((a) => a.id === agentId)
       if (agent) {
         agentSystemPrompt = agent.systemPrompt
@@ -561,15 +556,12 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
   // 从 models.json 加载配置，找到对应的 provider
   ensureModelsFile()
   const filePath = getModelsFilePath()
-  let providers: Model[] = []
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    providers = JSON.parse(content) as Model[]
-  } catch (error) {
-    console.error('Failed to read models file:', error)
+  const loadedProviders = readJsonFileSync<Model[]>(filePath)
+  if (!loadedProviders) {
     win.send('chat:error', { message: '错误：无法读取模型配置文件' })
     return
   }
+  const providers = loadedProviders
 
   // 找到包含该模型的 provider
   const provider = providers.find((p) => p.models.some((m) => m.name === effectiveModel))
@@ -596,7 +588,7 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     const tools = [...getToolDefinitions(), ...mcpManager.getToolDefinitions()]
     const effectiveTools = (() => {
       if (agentId) {
-        const allAgents = JSON.parse(fs.readFileSync(getAgentsFilePath(), 'utf-8')) as AgentConfig[]
+        const allAgents = readJsonFileSync<AgentConfig[]>(getAgentsFilePath()) ?? []
         const ag = allAgents.find((a) => a.id === agentId)
         if (ag && !ag.toolsEnabled) return []
       }
@@ -613,6 +605,12 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     let totalCompletionTokens = 0
     let totalTokens = 0
 
+    const MAX_TOKENS_LIMIT = 393216
+    const effectiveMaxTokens =
+      agentMaxTokens !== undefined && Number.isFinite(agentMaxTokens) && agentMaxTokens > 0
+        ? Math.min(Math.floor(agentMaxTokens), MAX_TOKENS_LIMIT)
+        : undefined
+
     const MAX_ROUNDS = 10
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const stream = await client.chat.completions.create({
@@ -622,7 +620,7 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
         stream: true,
         stream_options: { include_usage: true },
         ...(agentTemperature !== undefined ? { temperature: agentTemperature } : {}),
-        ...(agentMaxTokens !== undefined ? { max_tokens: agentMaxTokens } : {}),
+        ...(effectiveMaxTokens !== undefined ? { max_tokens: effectiveMaxTokens } : {}),
       })
 
       let contentBuffer = ''
