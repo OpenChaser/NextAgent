@@ -1,6 +1,7 @@
 interface SendChatMessageParams {
   message: string
   model: string
+  agentId?: string
 }
 
 interface ChatUsage {
@@ -51,6 +52,20 @@ interface McpServer {
   enabled: boolean
 }
 
+interface AgentConfig {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  maxTokens: number
+  toolsEnabled: boolean
+  builtin: boolean
+  createdAt: number
+  updatedAt: number
+}
+
 interface ElectronAPI {
   getAppVersion: () => Promise<string>
   sendChatMessage: (params: SendChatMessageParams) => void
@@ -65,6 +80,12 @@ interface ElectronAPI {
   saveMcpServer: (server: McpServer) => Promise<boolean>
   deleteMcpServer: (id: string) => Promise<boolean>
   toggleMcpServer: (id: string) => Promise<boolean>
+  getAgents: () => Promise<AgentConfig[]>
+  addAgent: (agent: AgentConfig) => Promise<boolean>
+  updateAgent: (agent: AgentConfig) => Promise<boolean>
+  deleteAgent: (agentId: string) => Promise<boolean>
+  getSelectedAgent: () => Promise<string | null>
+  setSelectedAgent: (agentId: string) => Promise<boolean>
 }
 
 interface Window {

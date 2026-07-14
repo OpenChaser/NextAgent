@@ -54,11 +54,11 @@ node node_modules/electron/install.js
 
 ### 创建 PR
 
-以 feature 分支合入 `dev` 为例（与项目 feature→dev 开发流一致）：
+以 feature 分支合入 `main` 为例（与项目 feature→main 开发流一致）：
 
 ```bash
 gh pr create \
-  --base dev \
+  --base main \
   --head feature/<分支名> \
   --title "<简洁标题>" \
   --body "<PR 描述，可用多行字符串或 --body-file 指定文件>"

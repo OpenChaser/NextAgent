@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 interface SendChatMessageParams {
   message: string
   model: string
+  agentId?: string
 }
 
 interface ModelConfig {
@@ -32,6 +33,20 @@ interface McpServer {
   enabled: boolean
 }
 
+interface AgentConfig {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  maxTokens: number
+  toolsEnabled: boolean
+  builtin: boolean
+  createdAt: number
+  updatedAt: number
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   sendChatMessage: (params: SendChatMessageParams) => ipcRenderer.send('chat:send', params),
@@ -55,4 +70,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveMcpServer: (server: McpServer) => ipcRenderer.invoke('mcp:save', server),
   deleteMcpServer: (id: string) => ipcRenderer.invoke('mcp:delete', id),
   toggleMcpServer: (id: string) => ipcRenderer.invoke('mcp:toggle', id),
+  getAgents: () => ipcRenderer.invoke('agents:get'),
+  addAgent: (agent: AgentConfig) => ipcRenderer.invoke('agents:add', agent),
+  updateAgent: (agent: AgentConfig) => ipcRenderer.invoke('agents:update', agent),
+  deleteAgent: (agentId: string) => ipcRenderer.invoke('agents:delete', agentId),
+  getSelectedAgent: () => ipcRenderer.invoke('agents:getSelected'),
+  setSelectedAgent: (agentId: string) => ipcRenderer.invoke('agents:setSelected', agentId),
 })
