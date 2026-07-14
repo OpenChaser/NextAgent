@@ -95,8 +95,14 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <div className="flex-1">
             <p className="text-sm font-medium text-gray-800">星辰大海</p>
           </div>
-          <button className="p-1.5 hover:bg-sidebar-hover rounded-lg transition-colors">
-            <Settings className="w-4 h-4 text-gray-500" />
+          <button
+            onClick={() => onTabChange('settings')}
+            className={`p-1.5 hover:bg-sidebar-hover rounded-lg transition-colors ${
+              activeTab === 'settings' ? 'bg-sidebar-active' : ''
+            }`}
+            title="设置"
+          >
+            <Settings className={`w-4 h-4 ${activeTab === 'settings' ? 'text-blue-500' : 'text-gray-500'}`} />
           </button>
           <button className="p-1.5 hover:bg-sidebar-hover rounded-lg transition-colors">
             <LayoutGrid className="w-4 h-4 text-gray-500" />

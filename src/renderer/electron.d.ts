@@ -38,6 +38,19 @@ interface Model {
   models: ModelConfig[]
 }
 
+type McpTransport = 'stdio' | 'sse'
+
+interface McpServer {
+  id: string
+  name: string
+  transport: McpTransport
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  enabled: boolean
+}
+
 interface ElectronAPI {
   getAppVersion: () => Promise<string>
   sendChatMessage: (params: SendChatMessageParams) => void
@@ -48,6 +61,10 @@ interface ElectronAPI {
   removeChatListeners: () => void
   getModels: () => Promise<Model[]>
   addModel: (model: Model) => Promise<boolean>
+  getMcpServers: () => Promise<McpServer[]>
+  saveMcpServer: (server: McpServer) => Promise<boolean>
+  deleteMcpServer: (id: string) => Promise<boolean>
+  toggleMcpServer: (id: string) => Promise<boolean>
 }
 
 interface Window {
