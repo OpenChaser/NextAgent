@@ -52,6 +52,22 @@ node node_modules/electron/install.js
 - 已安装 `gh` 并完成认证（`gh auth login`）。
 - feature 分支已推送到远程（`git push -u origin <branch>`）。
 
+### 提交前同步 main 最新代码
+
+创建 PR 前，必须先拉取远程 main 分支最新代码并与当前 feature 分支同步，避免基于过时基线提交导致 CI 失败或合并冲突：
+
+```bash
+git fetch origin main
+git rebase origin/main
+```
+
+- 若无冲突，rebase 自动完成，直接进入后续 gh pr create。
+- 若出现冲突，逐文件解决（git status 查看冲突文件，编辑后 git add，再 git rebase --continue）。
+- rebase 会改写 feature 分支历史，已推送的分支需用 git push --force-with-lease origin <branch> 更新。
+- 合并策略：当 main 引入与本分支平行的功能（双方都在同一位置新增内容）时，采用「两边内容都保留」的合并方式，而非二选一。
+
+> 同步完成后，务必重新执行 pnpm run typecheck 与 pnpm run build 验证，通过后方可创建 PR。
+
 ### 创建 PR
 
 以 feature 分支合入 `main` 为例（与项目 feature→main 开发流一致）：
