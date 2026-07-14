@@ -97,7 +97,9 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </div>
           <button
             onClick={() => onTabChange('settings')}
-            className={`p-1.5 hover:bg-sidebar-hover rounded-lg transition-colors ${activeTab === 'settings' ? 'bg-sidebar-active' : ''}`}
+            className={`p-1.5 hover:bg-sidebar-hover rounded-lg transition-colors ${
+              activeTab === 'settings' ? 'bg-sidebar-active' : ''
+            }`}
             title="设置"
           >
             <Settings className={`w-4 h-4 ${activeTab === 'settings' ? 'text-blue-500' : 'text-gray-500'}`} />

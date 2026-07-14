@@ -20,6 +20,19 @@ interface Model {
   models: ModelConfig[]
 }
 
+type McpTransport = 'stdio' | 'sse'
+
+interface McpServer {
+  id: string
+  name: string
+  transport: McpTransport
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  enabled: boolean
+}
+
 interface AgentConfig {
   id: string
   name: string
@@ -53,6 +66,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getModels: () => ipcRenderer.invoke('models:get'),
   addModel: (model: Model) => ipcRenderer.invoke('models:add', model),
+  getMcpServers: () => ipcRenderer.invoke('mcp:get'),
+  saveMcpServer: (server: McpServer) => ipcRenderer.invoke('mcp:save', server),
+  deleteMcpServer: (id: string) => ipcRenderer.invoke('mcp:delete', id),
+  toggleMcpServer: (id: string) => ipcRenderer.invoke('mcp:toggle', id),
   getAgents: () => ipcRenderer.invoke('agents:get'),
   addAgent: (agent: AgentConfig) => ipcRenderer.invoke('agents:add', agent),
   updateAgent: (agent: AgentConfig) => ipcRenderer.invoke('agents:update', agent),

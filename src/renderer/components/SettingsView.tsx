@@ -1,28 +1,43 @@
 import { useState } from 'react'
-import { Settings, Bot, Sliders, Bell, Shield } from 'lucide-react'
+import { ChevronLeft, Server, Settings, Bot, Sliders, Bell, Shield } from 'lucide-react'
 import { AgentConfigView } from './AgentConfigView'
+import { McpSettings } from './McpSettings'
+
+interface SettingsViewProps {
+  onBack?: () => void
+}
 
 interface SettingsSection {
   id: string
   label: string
-  icon: typeof Bot
+  icon: React.ComponentType<{ className?: string }>
   description: string
 }
 
 const sections: SettingsSection[] = [
   { id: 'general', label: '通用设置', icon: Sliders, description: '应用基础偏好' },
   { id: 'agent', label: '智能体配置', icon: Bot, description: '新建与管理智能体' },
+  { id: 'mcp', label: 'MCP', icon: Server, description: '管理 MCP 服务器' },
   { id: 'notification', label: '通知', icon: Bell, description: '消息提醒偏好' },
   { id: 'permission', label: '权限与安全', icon: Shield, description: '工具权限与数据安全' },
 ]
 
-export function SettingsView() {
+export function SettingsView({ onBack }: SettingsViewProps) {
   const [activeSection, setActiveSection] = useState('agent')
 
   return (
     <div className="flex-1 h-full overflow-hidden bg-gray-50">
       <div className="h-full max-w-5xl mx-auto flex flex-col">
         <div className="px-8 pt-8 pb-4">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors mb-3"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              返回
+            </button>
+          )}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
               <Settings className="w-5 h-5 text-gray-600" />
@@ -65,6 +80,8 @@ export function SettingsView() {
           <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
             {activeSection === 'agent' ? (
               <AgentConfigView />
+            ) : activeSection === 'mcp' ? (
+              <McpSettings />
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <Sliders className="w-8 h-8 text-gray-300 mx-auto mb-2" />

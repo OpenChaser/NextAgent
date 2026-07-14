@@ -5,6 +5,7 @@ import os from 'os'
 import OpenAI from 'openai'
 import { getToolDefinitions, executeTool } from './tools'
 import { showAbout } from './about'
+import { McpManager } from './mcp/mcpManager'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
@@ -170,19 +171,52 @@ ipcMain.handle('models:add', (_event, newModel: Model) => {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
     const models = JSON.parse(content) as Model[]
-    
+
     const exists = models.some((m) => m.id === newModel.id)
     if (!exists) {
       models.push(newModel)
       fs.writeFileSync(filePath, JSON.stringify(models, null, 2), 'utf-8')
     }
-    
+
     return true
   } catch (error) {
     console.error('Failed to add model:', error)
     return false
   }
 })
+
+type McpTransport = 'stdio' | 'sse'
+
+interface McpServer {
+  id: string
+  name: string
+  transport: McpTransport
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  enabled: boolean
+}
+
+function getMcpFilePath(): string {
+  const homeDir = os.homedir()
+  return path.join(homeDir, '.nextagent', 'mcp.json')
+}
+
+function ensureMcpFile(): void {
+  const filePath = getMcpFilePath()
+  if (!fs.existsSync(filePath)) {
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    try {
+      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf-8')
+    } catch (error) {
+      console.error('Failed to initialize mcp file:', error)
+    }
+  }
+}
 
 interface AgentConfig {
   id: string
@@ -370,6 +404,73 @@ function ensurePreferencesFile(): void {
   }
 }
 
+function readMcpServers(): McpServer[] {
+  ensureMcpFile()
+  const filePath = getMcpFilePath()
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const servers = JSON.parse(content) as McpServer[]
+    return Array.isArray(servers) ? servers : []
+  } catch (error) {
+    console.error('Failed to read mcp file:', error)
+    return []
+  }
+}
+
+function writeMcpServers(servers: McpServer[]): void {
+  ensureMcpFile()
+  const filePath = getMcpFilePath()
+  fs.writeFileSync(filePath, JSON.stringify(servers, null, 2), 'utf-8')
+}
+
+ipcMain.handle('mcp:get', () => {
+  return readMcpServers()
+})
+
+ipcMain.handle('mcp:save', (_event, server: McpServer) => {
+  try {
+    const servers = readMcpServers()
+    const index = servers.findIndex((s) => s.id === server.id)
+    if (index >= 0) {
+      servers[index] = server
+    } else {
+      servers.push(server)
+    }
+    writeMcpServers(servers)
+    return true
+  } catch (error) {
+    console.error('Failed to save mcp server:', error)
+    return false
+  }
+})
+
+ipcMain.handle('mcp:delete', (_event, id: string) => {
+  try {
+    const servers = readMcpServers()
+    const filtered = servers.filter((s) => s.id !== id)
+    writeMcpServers(filtered)
+    return true
+  } catch (error) {
+    console.error('Failed to delete mcp server:', error)
+    return false
+  }
+})
+
+ipcMain.handle('mcp:toggle', (_event, id: string) => {
+  try {
+    const servers = readMcpServers()
+    const target = servers.find((s) => s.id === id)
+    if (target) {
+      target.enabled = !target.enabled
+      writeMcpServers(servers)
+    }
+    return true
+  } catch (error) {
+    console.error('Failed to toggle mcp server:', error)
+    return false
+  }
+})
+
 function readPreferences(): Record<string, unknown> {
   ensurePreferencesFile()
   try {
@@ -465,13 +566,15 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     return
   }
 
+  const mcpManager = new McpManager()
   try {
+    await mcpManager.connectAll()
     const client = new OpenAI({
       baseURL: provider.url,
       apiKey: provider.key,
     })
 
-    const tools = getToolDefinitions()
+    const tools = [...getToolDefinitions(), ...mcpManager.getToolDefinitions()]
     const effectiveTools = (() => {
       if (agentId) {
         const allAgents = JSON.parse(fs.readFileSync(getAgentsFilePath(), 'utf-8')) as AgentConfig[]
@@ -561,7 +664,9 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
             toolArgs = {}
           }
           console.log(`[Tool] Executing ${tc.name} with args:`, toolArgs)
-          const result = await executeTool(tc.name, toolArgs)
+          const result = mcpManager.isMcpTool(tc.name)
+            ? await mcpManager.callTool(tc.name, toolArgs)
+            : await executeTool(tc.name, toolArgs)
 
           win.send('chat:tool_call', {
             name: tc.name,
@@ -605,6 +710,8 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     win.send('chat:error', {
       message: error instanceof Error ? error.message : '未知错误',
     })
+  } finally {
+    await mcpManager.disconnectAll()
   }
 })
 

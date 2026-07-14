@@ -14,7 +14,7 @@ export default function App() {
         {activeTab === 'automation' ? (
           <AutomationView />
         ) : activeTab === 'settings' ? (
-          <SettingsView />
+          <SettingsView onBack={() => setActiveTab('new-task')} />
         ) : (
           <ChatArea />
         )}
