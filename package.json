@@ -65,6 +65,7 @@
     "wait-on": "^9.0.10"
   },
   "dependencies": {
+    "gray-matter": "^4.0.3",
     "openai": "^4.57.0"
   }
 }

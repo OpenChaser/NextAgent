@@ -39,7 +39,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             </button>
           </div>
         </div>
-        
+
         <input
           type="text"
           placeholder="搜索..."

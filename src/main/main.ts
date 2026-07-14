@@ -6,6 +6,8 @@ import OpenAI from 'openai'
 import { getToolDefinitions, executeTool } from './tools'
 import { showAbout } from './about'
 import { McpManager } from './mcp/mcpManager'
+import { ensureSkillsDirs, loadSkills, loadGlobalSkills, saveSkill, deleteSkill } from './skills'
+import type { SkillFile, SkillSource } from './skills'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
@@ -83,6 +85,7 @@ const menuTemplate: Electron.MenuItemConstructorOptions[] = [
 app.whenReady().then(() => {
   const menu = Menu.buildFromTemplate(menuTemplate)
   Menu.setApplicationMenu(menu)
+  ensureSkillsDirs()
   createWindow()
 
   app.on('activate', () => {
@@ -183,6 +186,22 @@ ipcMain.handle('models:add', (_event, newModel: Model) => {
     console.error('Failed to add model:', error)
     return false
   }
+})
+
+ipcMain.handle('skills:get', () => {
+  return loadSkills()
+})
+
+ipcMain.handle('skills:getGlobal', () => {
+  return loadGlobalSkills()
+})
+
+ipcMain.handle('skills:save', (_event, payload: { skill: SkillFile; target: SkillSource }) => {
+  return saveSkill(payload.skill, payload.target)
+})
+
+ipcMain.handle('skills:delete', (_event, payload: { source: SkillSource; name: string }) => {
+  return deleteSkill(payload.source, payload.name)
 })
 
 type McpTransport = 'stdio' | 'sse'

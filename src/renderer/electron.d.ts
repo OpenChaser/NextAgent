@@ -65,6 +65,23 @@ interface AgentConfig {
   createdAt: number
   updatedAt: number
 }
+type SkillSource = 'global' | 'project'
+
+interface SkillFile {
+  name: string
+  description: string
+  content: string
+  license?: string
+  allowedTools?: string[]
+  enabled?: boolean
+}
+
+interface Skill extends SkillFile {
+  id: string
+  source: SkillSource
+  createdAt: number
+  dir: string
+}
 
 interface ElectronAPI {
   getAppVersion: () => Promise<string>
@@ -85,7 +102,11 @@ interface ElectronAPI {
   updateAgent: (agent: AgentConfig) => Promise<boolean>
   deleteAgent: (agentId: string) => Promise<boolean>
   getSelectedAgent: () => Promise<string | null>
-  setSelectedAgent: (agentId: string) => Promise<boolean>
+  setSelectedAgent: (agentId: string) => Promise<boolean>,
+  getSkills: () => Promise<Skill[]>
+  getGlobalSkills: () => Promise<Skill[]>
+  saveSkill: (skill: SkillFile, target: SkillSource) => Promise<boolean>
+  deleteSkill: (source: SkillSource, name: string) => Promise<boolean>,
 }
 
 interface Window {

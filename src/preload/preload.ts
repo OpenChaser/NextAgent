@@ -46,6 +46,23 @@ interface AgentConfig {
   createdAt: number
   updatedAt: number
 }
+type SkillSource = 'global' | 'project'
+
+interface SkillFile {
+  name: string
+  description: string
+  content: string
+  license?: string
+  allowedTools?: string[]
+  enabled?: boolean
+}
+
+interface Skill extends SkillFile {
+  id: string
+  source: SkillSource
+  createdAt: number
+  dir: string
+}
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
@@ -76,4 +93,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteAgent: (agentId: string) => ipcRenderer.invoke('agents:delete', agentId),
   getSelectedAgent: () => ipcRenderer.invoke('agents:getSelected'),
   setSelectedAgent: (agentId: string) => ipcRenderer.invoke('agents:setSelected', agentId),
+  getSkills: () => ipcRenderer.invoke('skills:get') as Promise<Skill[]>,
+  getGlobalSkills: () => ipcRenderer.invoke('skills:getGlobal') as Promise<Skill[]>,
+  saveSkill: (skill: SkillFile, target: SkillSource) =>
+    ipcRenderer.invoke('skills:save', { skill, target }) as Promise<boolean>,
+  deleteSkill: (source: SkillSource, name: string) =>
+    ipcRenderer.invoke('skills:delete', { source, name }) as Promise<boolean>,
 })

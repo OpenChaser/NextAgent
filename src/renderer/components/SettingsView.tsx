@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ChevronLeft, Server, Settings, Bot, Sliders, Bell, Shield } from 'lucide-react'
+import { ChevronLeft, Server, Settings, Bot, Sliders, Bell, Shield, Sparkles } from 'lucide-react'
 import { AgentConfigView } from './AgentConfigView'
 import { McpSettings } from './McpSettings'
+import { SkillView } from './SkillView'
 
 interface SettingsViewProps {
   onBack?: () => void
@@ -17,6 +18,7 @@ interface SettingsSection {
 const sections: SettingsSection[] = [
   { id: 'general', label: '通用设置', icon: Sliders, description: '应用基础偏好' },
   { id: 'agent', label: '智能体配置', icon: Bot, description: '新建与管理智能体' },
+  { id: 'skill', label: '技能管理', icon: Sparkles, description: '管理 AI 技能（SKILL.md）' },
   { id: 'mcp', label: 'MCP', icon: Server, description: '管理 MCP 服务器' },
   { id: 'notification', label: '通知', icon: Bell, description: '消息提醒偏好' },
   { id: 'permission', label: '权限与安全', icon: Shield, description: '工具权限与数据安全' },
@@ -82,6 +84,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
               <AgentConfigView />
             ) : activeSection === 'mcp' ? (
               <McpSettings />
+            ) : activeSection === 'skill' ? (
+              <SkillView />
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <Sliders className="w-8 h-8 text-gray-300 mx-auto mb-2" />
