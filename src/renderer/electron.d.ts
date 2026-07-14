@@ -1,6 +1,7 @@
 interface SendChatMessageParams {
   message: string
   model: string
+  agentId?: string
 }
 
 interface ChatUsage {
@@ -38,6 +39,20 @@ interface Model {
   models: ModelConfig[]
 }
 
+interface AgentConfig {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  maxTokens: number
+  toolsEnabled: boolean
+  builtin: boolean
+  createdAt: number
+  updatedAt: number
+}
+
 interface ElectronAPI {
   getAppVersion: () => Promise<string>
   sendChatMessage: (params: SendChatMessageParams) => void
@@ -48,6 +63,12 @@ interface ElectronAPI {
   removeChatListeners: () => void
   getModels: () => Promise<Model[]>
   addModel: (model: Model) => Promise<boolean>
+  getAgents: () => Promise<AgentConfig[]>
+  addAgent: (agent: AgentConfig) => Promise<boolean>
+  updateAgent: (agent: AgentConfig) => Promise<boolean>
+  deleteAgent: (agentId: string) => Promise<boolean>
+  getSelectedAgent: () => Promise<string | null>
+  setSelectedAgent: (agentId: string) => Promise<boolean>
 }
 
 interface Window {

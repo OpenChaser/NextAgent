@@ -184,16 +184,259 @@ ipcMain.handle('models:add', (_event, newModel: Model) => {
   }
 })
 
+interface AgentConfig {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  maxTokens: number
+  toolsEnabled: boolean
+  builtin: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+function getAgentsFilePath(): string {
+  const homeDir = os.homedir()
+  return path.join(homeDir, '.nextagent', 'agents.json')
+}
+
+function getBuiltinAgents(): AgentConfig[] {
+  const now = Date.now()
+  return [
+    {
+      id: 'builtin-plan',
+      name: 'Plan',
+      description: '规划与分析智能体：只读分析代码库，制定实现方案，不修改任何代码',
+      systemPrompt:
+        'You are a planning agent focused on analysis and architectural design. Your role is to:\n\n' +
+        '- Analyze codebases and understand existing architecture, conventions, and dependencies\n' +
+        '- Break down complex requirements into clear, actionable implementation plans\n' +
+        '- Identify potential risks, edge cases, and dependencies before any code is written\n' +
+        '- Suggest the best approach, file structure, and implementation order\n' +
+        '- Review proposed changes and provide constructive, specific feedback\n\n' +
+        'You operate in read-only mode: do NOT write or modify any code. Instead, produce detailed, step-by-step plans that the Build agent can execute. ' +
+        'Think carefully about each step, consider alternatives, and explain your reasoning. ' +
+        'Keep the plan concrete and specific — reference actual files, functions, and modules whenever possible.',
+      model: '',
+      temperature: 0.1,
+      maxTokens: 8192,
+      toolsEnabled: true,
+      builtin: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'builtin-build',
+      name: 'Build',
+      description: '构建与实现智能体：编写和修改代码，执行实现方案，验证编译通过',
+      systemPrompt:
+        'You are a build agent focused on implementing code changes. Your role is to:\n\n' +
+        '- Write clean, idiomatic, and maintainable code following existing project conventions\n' +
+        '- Execute implementation plans step by step, creating and modifying files as needed\n' +
+        '- Run type checks and builds to verify your changes compile correctly\n' +
+        '- Fix any errors, type issues, or test failures that arise during implementation\n' +
+        '- Keep changes minimal and focused — avoid unnecessary refactoring unless explicitly requested\n\n' +
+        'When writing code, first understand the surrounding context: check imports, follow existing patterns, and use the project\u2019s established libraries and utilities. ' +
+        'Always prioritize correctness and consistency over cleverness. ' +
+        'After making changes, verify they compile and pass checks before declaring the task complete.',
+      model: '',
+      temperature: 0.3,
+      maxTokens: 8192,
+      toolsEnabled: true,
+      builtin: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]
+}
+
+function ensureAgentsFile(): void {
+  const filePath = getAgentsFilePath()
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  if (!fs.existsSync(filePath)) {
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(getBuiltinAgents(), null, 2), 'utf-8')
+    } catch (error) {
+      console.error('Failed to initialize agents file:', error)
+    }
+    return
+  }
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const agents = JSON.parse(content) as AgentConfig[]
+    const builtins = getBuiltinAgents()
+    const missing = builtins.filter((b) => !agents.some((a) => a.id === b.id))
+    if (missing.length > 0) {
+      agents.push(...missing)
+      fs.writeFileSync(filePath, JSON.stringify(agents, null, 2), 'utf-8')
+    }
+  } catch (error) {
+    console.error('Failed to ensure built-in agents:', error)
+  }
+}
+
+ipcMain.handle('agents:get', () => {
+  ensureAgentsFile()
+  const filePath = getAgentsFilePath()
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const agents = JSON.parse(content) as AgentConfig[]
+    return agents.sort((a, b) => Number(b.builtin) - Number(a.builtin))
+  } catch (error) {
+    console.error('Failed to read agents file:', error)
+    return []
+  }
+})
+
+ipcMain.handle('agents:add', (_event, newAgent: AgentConfig) => {
+  ensureAgentsFile()
+  const filePath = getAgentsFilePath()
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const agents = JSON.parse(content) as AgentConfig[]
+    const exists = agents.some((a) => a.id === newAgent.id)
+    if (!exists) {
+      agents.push(newAgent)
+      fs.writeFileSync(filePath, JSON.stringify(agents, null, 2), 'utf-8')
+    }
+    return true
+  } catch (error) {
+    console.error('Failed to add agent:', error)
+    return false
+  }
+})
+
+ipcMain.handle('agents:update', (_event, updatedAgent: AgentConfig) => {
+  ensureAgentsFile()
+  const filePath = getAgentsFilePath()
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const agents = JSON.parse(content) as AgentConfig[]
+    const index = agents.findIndex((a) => a.id === updatedAgent.id)
+    if (index !== -1) {
+      agents[index] = { ...agents[index], ...updatedAgent, updatedAt: Date.now() }
+      fs.writeFileSync(filePath, JSON.stringify(agents, null, 2), 'utf-8')
+      return true
+    }
+    return false
+  } catch (error) {
+    console.error('Failed to update agent:', error)
+    return false
+  }
+})
+
+ipcMain.handle('agents:delete', (_event, agentId: string) => {
+  ensureAgentsFile()
+  const filePath = getAgentsFilePath()
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const agents = JSON.parse(content) as AgentConfig[]
+    const target = agents.find((a) => a.id === agentId)
+    if (target?.builtin) {
+      return false
+    }
+    const filtered = agents.filter((a) => a.id !== agentId)
+    fs.writeFileSync(filePath, JSON.stringify(filtered, null, 2), 'utf-8')
+    return true
+  } catch (error) {
+    console.error('Failed to delete agent:', error)
+    return false
+  }
+})
+
+function getPreferencesFilePath(): string {
+  const homeDir = os.homedir()
+  return path.join(homeDir, '.nextagent', 'preferences.json')
+}
+
+function ensurePreferencesFile(): void {
+  const filePath = getPreferencesFilePath()
+  if (!fs.existsSync(filePath)) {
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    try {
+      fs.writeFileSync(filePath, JSON.stringify({}, null, 2), 'utf-8')
+    } catch (error) {
+      console.error('Failed to initialize preferences file:', error)
+    }
+  }
+}
+
+function readPreferences(): Record<string, unknown> {
+  ensurePreferencesFile()
+  try {
+    const content = fs.readFileSync(getPreferencesFilePath(), 'utf-8')
+    return JSON.parse(content) as Record<string, unknown>
+  } catch (error) {
+    console.error('Failed to read preferences file:', error)
+    return {}
+  }
+}
+
+function writePreferences(prefs: Record<string, unknown>): void {
+  ensurePreferencesFile()
+  try {
+    fs.writeFileSync(getPreferencesFilePath(), JSON.stringify(prefs, null, 2), 'utf-8')
+  } catch (error) {
+    console.error('Failed to write preferences file:', error)
+  }
+}
+
+ipcMain.handle('agents:getSelected', () => {
+  const prefs = readPreferences()
+  return (prefs.selectedAgentId as string) || null
+})
+
+ipcMain.handle('agents:setSelected', (_event, agentId: string) => {
+  const prefs = readPreferences()
+  prefs.selectedAgentId = agentId
+  writePreferences(prefs)
+  return true
+})
+
 interface ChatMessageParams {
   message: string
   model: string
+  agentId?: string
 }
 
 ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
-  const { message, model } = params
+  const { message, model, agentId } = params
   const win = event.sender
 
-  console.log(`[Chat] Streaming message to ${model}: ${message}`)
+  // 解析智能体配置（若指定），用于注入 systemPrompt / temperature / maxTokens / model
+  let agentSystemPrompt = ''
+  let agentTemperature: number | undefined
+  let agentMaxTokens: number | undefined
+  let effectiveModel = model
+  if (agentId) {
+    ensureAgentsFile()
+    try {
+      const content = fs.readFileSync(getAgentsFilePath(), 'utf-8')
+      const agents = JSON.parse(content) as AgentConfig[]
+      const agent = agents.find((a) => a.id === agentId)
+      if (agent) {
+        agentSystemPrompt = agent.systemPrompt
+        agentTemperature = agent.temperature
+        agentMaxTokens = agent.maxTokens
+        if (agent.model) {
+          effectiveModel = agent.model
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load agent for chat:', error)
+    }
+  }
+
+  console.log(`[Chat] Streaming message to ${effectiveModel}${agentId ? ` (agent: ${agentId})` : ''}: ${message}`)
 
   // 从 models.json 加载配置，找到对应的 provider
   ensureModelsFile()
@@ -209,13 +452,13 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
   }
 
   // 找到包含该模型的 provider
-  const provider = providers.find((p) => p.models.some((m) => m.name === model))
+  const provider = providers.find((p) => p.models.some((m) => m.name === effectiveModel))
   if (!provider) {
-    win.send('chat:error', { message: `错误：未找到模型 "${model}" 对应的配置` })
+    win.send('chat:error', { message: `错误：未找到模型 "${effectiveModel}" 对应的配置` })
     return
   }
 
-  const modelConfig = provider.models.find((m) => m.name === model)
+  const modelConfig = provider.models.find((m) => m.name === effectiveModel)
 
   if (!provider.key) {
     win.send('chat:error', { message: `错误：模型提供商 "${provider.name}" 未配置 API Key，请在模型配置中填写` })
@@ -229,8 +472,20 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     })
 
     const tools = getToolDefinitions()
+    const effectiveTools = (() => {
+      if (agentId) {
+        const allAgents = JSON.parse(fs.readFileSync(getAgentsFilePath(), 'utf-8')) as AgentConfig[]
+        const ag = allAgents.find((a) => a.id === agentId)
+        if (ag && !ag.toolsEnabled) return []
+      }
+      return tools
+    })()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: any[] = [{ role: 'user', content: message }]
+    const messages: any[] = []
+    if (agentSystemPrompt) {
+      messages.push({ role: 'system', content: agentSystemPrompt })
+    }
+    messages.push({ role: 'user', content: message })
 
     let totalPromptTokens = 0
     let totalCompletionTokens = 0
@@ -239,11 +494,13 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     const MAX_ROUNDS = 10
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const stream = await client.chat.completions.create({
-        model: model,
+        model: effectiveModel,
         messages: messages,
-        tools: tools,
+        tools: effectiveTools,
         stream: true,
         stream_options: { include_usage: true },
+        ...(agentTemperature !== undefined ? { temperature: agentTemperature } : {}),
+        ...(agentMaxTokens !== undefined ? { max_tokens: agentMaxTokens } : {}),
       })
 
       let contentBuffer = ''

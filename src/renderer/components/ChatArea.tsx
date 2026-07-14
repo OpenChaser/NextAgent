@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Loader2 } from 'lucide-react'
+import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Loader2, Sparkles } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
 import { PermissionPopover } from './PermissionPopover'
 import { ModelPopover } from './ModelPopover'
+import { AgentPopover } from './AgentPopover'
 import { Modal } from './Modal'
 import { CustomModelConfigDialog } from './CustomModelConfigDialog'
 
@@ -30,8 +31,10 @@ export function ChatArea() {
   const [isPermissionOpen, setIsPermissionOpen] = useState(false)
   const [isModelOpen, setIsModelOpen] = useState(false)
   const [isModelConfigOpen, setIsModelConfigOpen] = useState(false)
+  const [isAgentOpen, setIsAgentOpen] = useState(false)
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null)
   const [selectedModel, setSelectedModel] = useState('deepseek-v4-flash')
+  const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null)
   const [lastPromptTokens, setLastPromptTokens] = useState(0)
   const [lastCompletionTokens, setLastCompletionTokens] = useState(0)
   const [totalPromptTokens, setTotalPromptTokens] = useState(0)
@@ -40,11 +43,38 @@ export function ChatArea() {
   const workspaceButtonRef = useRef<HTMLButtonElement>(null)
   const permissionButtonRef = useRef<HTMLButtonElement>(null)
   const modelButtonRef = useRef<HTMLButtonElement>(null)
+  const agentButtonRef = useRef<HTMLButtonElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    const loadSelectedAgent = async () => {
+      try {
+        const agents = await window.electronAPI.getAgents()
+        const savedId = await window.electronAPI.getSelectedAgent()
+        let agent: AgentConfig | null = null
+        if (savedId) {
+          agent = agents.find((a) => a.id === savedId) || null
+        }
+        if (!agent && agents.length > 0) {
+          agent = agents[0]
+          await window.electronAPI.setSelectedAgent(agent.id)
+        }
+        if (agent) {
+          setSelectedAgent(agent)
+          if (agent.model) {
+            setSelectedModel(agent.model)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load selected agent:', error)
+      }
+    }
+    loadSelectedAgent()
+  }, [])
 
   const handleSend = async () => {
     if (!message.trim() || isSending) return
@@ -116,7 +146,8 @@ export function ChatArea() {
     // 发送消息（流式，无需等待返回值）
     window.electronAPI.sendChatMessage({
       message: userMessage.content,
-      model: selectedModel,
+      model: selectedAgent?.model || selectedModel,
+      agentId: selectedAgent?.id,
     })
   }
 
@@ -137,11 +168,21 @@ export function ChatArea() {
     setIsModelOpen(false)
   }
 
+  const handleSelectAgent = (agent: AgentConfig) => {
+    setSelectedAgent(agent)
+    if (agent.model) {
+      setSelectedModel(agent.model)
+    }
+    window.electronAPI.setSelectedAgent(agent.id)
+    setIsAgentOpen(false)
+  }
+
   const closeAllPopovers = () => {
     setIsWorkspaceOpen(false)
     setIsPermissionOpen(false)
     setIsModelOpen(false)
     setIsModelConfigOpen(false)
+    setIsAgentOpen(false)
   }
 
   const handleConfigureModel = () => {
@@ -163,6 +204,12 @@ export function ChatArea() {
     const willOpen = !isPermissionOpen
     closeAllPopovers()
     setIsPermissionOpen(willOpen)
+  }
+
+  const toggleAgent = () => {
+    const willOpen = !isAgentOpen
+    closeAllPopovers()
+    setIsAgentOpen(willOpen)
   }
 
   const toggleModel = () => {
@@ -256,6 +303,19 @@ export function ChatArea() {
 
             <div className="flex items-center gap-4">
               <button
+                ref={agentButtonRef}
+                onClick={toggleAgent}
+                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                disabled={isSending}
+              >
+                <Sparkles className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm text-indigo-600 font-medium">
+                  {selectedAgent ? selectedAgent.name : '选择智能体'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-indigo-500" />
+              </button>
+
+              <button
                 ref={modelButtonRef}
                 onClick={toggleModel}
                 className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
@@ -332,6 +392,19 @@ export function ChatArea() {
         alignRight
       >
         <PermissionPopover />
+      </Popover>
+
+      <Popover
+        isOpen={isAgentOpen}
+        onClose={closeAllPopovers}
+        anchorRef={agentButtonRef}
+        height={420}
+        alignRight
+      >
+        <AgentPopover
+          selectedAgentId={selectedAgent?.id || null}
+          onSelectAgent={handleSelectAgent}
+        />
       </Popover>
 
       <Popover

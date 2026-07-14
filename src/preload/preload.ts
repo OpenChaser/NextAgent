@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 interface SendChatMessageParams {
   message: string
   model: string
+  agentId?: string
 }
 
 interface ModelConfig {
@@ -17,6 +18,20 @@ interface Model {
   url: string
   key: string
   models: ModelConfig[]
+}
+
+interface AgentConfig {
+  id: string
+  name: string
+  description: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  maxTokens: number
+  toolsEnabled: boolean
+  builtin: boolean
+  createdAt: number
+  updatedAt: number
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -38,4 +53,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getModels: () => ipcRenderer.invoke('models:get'),
   addModel: (model: Model) => ipcRenderer.invoke('models:add', model),
+  getAgents: () => ipcRenderer.invoke('agents:get'),
+  addAgent: (agent: AgentConfig) => ipcRenderer.invoke('agents:add', agent),
+  updateAgent: (agent: AgentConfig) => ipcRenderer.invoke('agents:update', agent),
+  deleteAgent: (agentId: string) => ipcRenderer.invoke('agents:delete', agentId),
+  getSelectedAgent: () => ipcRenderer.invoke('agents:getSelected'),
+  setSelectedAgent: (agentId: string) => ipcRenderer.invoke('agents:setSelected', agentId),
 })
