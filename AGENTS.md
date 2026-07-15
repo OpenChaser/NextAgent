@@ -16,6 +16,29 @@ pnpm run build
 
 上述两条命令均通过后，方可提交代码。该检查与 GitHub Actions 门禁（[.github/workflows/build.yml](.github/workflows/build.yml)）保持一致。
 
+## 架构设计文档同步
+
+凡修改了相关代码或架构设计，必须同步更新 [`docs/design/`](docs/design) 目录下对应的设计文档，确保文档与代码始终保持一致。
+
+当前已纳入管理的设计文档：
+
+| 文档 | 对应模块 |
+|------|----------|
+| [agent-memory-design.md](docs/design/agent-memory-design.md) | 记忆功能（短记忆 / 长记忆 / 内容压缩） |
+| [builtin-tools-design.md](docs/design/builtin-tools-design.md) | 内置工具系统（ToolDefinition / ReAct 循环） |
+| [builtin-agent-design.md](docs/design/builtin-agent-design.md) | 内置 Agent（Plan / Build / 持久化 / 保护机制） |
+| [mcp-design.md](docs/design/mcp-design.md) | MCP（stdio / sse 双传输 / 工具前缀隔离） |
+| [skill-design.md](docs/design/skill-design.md) | SKILL（SKILL.md 格式 / gray-matter 解析 / 双层加载） |
+
+同步要求：
+
+- **新增模块**：在 `docs/design/` 下新建对应设计文档，并在上表追加一行。
+- **修改现有模块**：同步更新该模块设计文档中的相关章节（类型定义、数据流、关键代码片段、文件索引等）。
+- **删除模块**：移除对应设计文档，并从上表删除该行。
+- 新增/修改/删除设计文档的动作应与代码改动放在同一 PR 中提交，避免文档与代码脱节。
+
+> 设计文档是项目架构的「单一事实来源」，PR 审查时对照检查文档是否已同步更新。
+
 ## 依赖安装
 
 使用 pnpm 安装相关软件（依赖包、Electron 二进制等）时，优先使用阿里云镜像，以提升国内网络环境下的下载速度与稳定性。
