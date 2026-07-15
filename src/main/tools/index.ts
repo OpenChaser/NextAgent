@@ -7,6 +7,7 @@ import { searchFilesTool } from './searchFiles'
 import { searchContentTool } from './searchContent'
 import { runCommandTool } from './runCommand'
 import { gitStatusTool } from './gitStatus'
+import { saveMemoryTool, recallMemoryTool, listMemoryTool, deleteMemoryTool } from './memory'
 
 // 所有工具定义
 export const allTools: ToolDefinition[] = [
@@ -18,6 +19,10 @@ export const allTools: ToolDefinition[] = [
   searchContentTool,
   runCommandTool,
   gitStatusTool,
+  saveMemoryTool,
+  recallMemoryTool,
+  listMemoryTool,
+  deleteMemoryTool,
 ]
 
 // 工具执行器映射

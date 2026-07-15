@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Bot, FolderKanban, Users, Zap, MoreHorizontal, ChevronRight, MessageSquare, LayoutGrid, Settings, RefreshCw, Search, Grid3X3 } from 'lucide-react'
+import { Plus, Bot, FolderKanban, Users, Zap, MoreHorizontal, ChevronRight, MessageSquare, LayoutGrid, Settings, RefreshCw, Search, Grid3X3, Brain } from 'lucide-react'
 
 interface SidebarProps {
   activeTab: string
@@ -13,6 +13,7 @@ const menuItems = [
   { id: 'project', icon: FolderKanban, label: '项目' },
   { id: 'experts', icon: Users, label: '专家·技能·连接器' },
   { id: 'automation', icon: Zap, label: '自动化' },
+  { id: 'memory', icon: Brain, label: '记忆' },
   { id: 'more', icon: MoreHorizontal, label: '更多', badge: '资料库·灵感' },
 ]
 

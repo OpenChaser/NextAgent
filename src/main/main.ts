@@ -8,6 +8,22 @@ import { showAbout } from './about'
 import { McpManager } from './mcp/mcpManager'
 import { ensureSkillsDirs, loadSkills, loadGlobalSkills, saveSkill, deleteSkill } from './skills'
 import type { SkillFile, SkillSource } from './skills'
+import {
+  ensureSessionForAgent,
+  setCurrentAgent,
+  appendTurns,
+  getSession,
+  recallMemories,
+  formatMemoriesForInjection,
+  compressIfNeeded,
+  setLastPromptTokens,
+  resetSession,
+  getAllMemories,
+  saveMemory,
+  deleteMemory,
+  MAX_INPUT_TOKENS_FALLBACK,
+  COMPRESSION_THRESHOLD_RATIO,
+} from './memory/memoryManager'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
@@ -518,6 +534,30 @@ ipcMain.handle('agents:setSelected', (_event, agentId: string) => {
   return true
 })
 
+ipcMain.handle('memory:get', () => {
+  return getAllMemories()
+})
+
+ipcMain.handle(
+  'memory:add',
+  (_event, payload: { agentId: string; content: string; tags?: string[] }) => {
+    try {
+      return saveMemory(payload.agentId, payload.content, 'fact', payload.tags)
+    } catch (error) {
+      console.error('Failed to add memory:', error)
+      return null
+    }
+  }
+)
+
+ipcMain.handle('memory:delete', (_event, id: string) => {
+  return deleteMemory(id)
+})
+
+ipcMain.on('chat:reset', () => {
+  resetSession()
+})
+
 interface ChatMessageParams {
   message: string
   model: string
@@ -594,12 +634,27 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
       }
       return tools
     })()
+
+    // 会话上下文：切换 agent 起新会话；同 agent 延续上下文（短记忆）
+    ensureSessionForAgent(agentId || '', agentSystemPrompt)
+    setCurrentAgent(agentId || '')
+    appendTurns([{ role: 'user', content: message }])
+
+    const sess = getSession()
+    const recalled = recallMemories(agentId || '', message)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const messages: any[] = []
-    if (agentSystemPrompt) {
-      messages.push({ role: 'system', content: agentSystemPrompt })
+    if (sess.systemPrompt) {
+      messages.push({ role: 'system', content: sess.systemPrompt })
     }
-    messages.push({ role: 'user', content: message })
+    if (recalled.length > 0) {
+      messages.push({ role: 'system', content: formatMemoriesForInjection(recalled) })
+    }
+    if (sess.summary) {
+      messages.push({ role: 'system', content: `[对话摘要]\n${sess.summary}` })
+    }
+    messages.push(...sess.recentTurns)
+    const payloadLen = messages.length
 
     let totalPromptTokens = 0
     let totalCompletionTokens = 0
@@ -612,6 +667,20 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
         : undefined
 
     const MAX_ROUNDS = 10
+
+    const syncAndMaybeCompress = async () => {
+      appendTurns(messages.slice(payloadLen))
+      setLastPromptTokens(totalPromptTokens)
+      const tokenLimit = modelConfig?.max_input_tokens || MAX_INPUT_TOKENS_FALLBACK
+      if (totalPromptTokens > tokenLimit * COMPRESSION_THRESHOLD_RATIO) {
+        try {
+          await compressIfNeeded(client, effectiveModel, tokenLimit)
+        } catch (error) {
+          console.error('[Memory] compression failed:', error)
+        }
+      }
+    }
+
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const stream = await client.chat.completions.create({
         model: effectiveModel,
@@ -702,6 +771,7 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
       }
 
       // 没有 tool_calls，流式完成
+      messages.push({ role: 'assistant', content: contentBuffer })
       win.send('chat:done', {
         usage: {
           prompt_tokens: totalPromptTokens,
@@ -710,10 +780,12 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
         },
         max_input_tokens: modelConfig?.max_input_tokens,
       })
+      await syncAndMaybeCompress()
       return
     }
 
     // 达到最大轮次
+    await syncAndMaybeCompress()
     win.send('chat:done', {
       usage: {
         prompt_tokens: totalPromptTokens,

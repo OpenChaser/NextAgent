@@ -65,6 +65,15 @@ interface AgentConfig {
   createdAt: number
   updatedAt: number
 }
+
+interface MemoryEntry {
+  id: string
+  agentId: string
+  content: string
+  type: 'fact' | 'summary'
+  tags?: string[]
+  createdAt: number
+}
 type SkillSource = 'global' | 'project'
 
 interface SkillFile {
@@ -107,6 +116,10 @@ interface ElectronAPI {
   getGlobalSkills: () => Promise<Skill[]>
   saveSkill: (skill: SkillFile, target: SkillSource) => Promise<boolean>
   deleteSkill: (source: SkillSource, name: string) => Promise<boolean>,
+  resetSession: () => void
+  getMemories: () => Promise<MemoryEntry[]>
+  addMemory: (entry: { agentId: string; content: string; tags?: string[] }) => Promise<MemoryEntry | null>
+  deleteMemory: (id: string) => Promise<boolean>
 }
 
 interface Window {

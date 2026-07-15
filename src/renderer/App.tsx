@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar'
 import { ChatArea } from './components/ChatArea'
 import { AutomationView } from './components/AutomationView'
 import { SettingsView } from './components/SettingsView'
+import { MemoryView } from './components/MemoryView'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('new-task')
@@ -15,6 +16,8 @@ export default function App() {
           <AutomationView />
         ) : activeTab === 'settings' ? (
           <SettingsView onBack={() => setActiveTab('new-task')} />
+        ) : activeTab === 'memory' ? (
+          <MemoryView onBack={() => setActiveTab('new-task')} />
         ) : (
           <ChatArea />
         )}

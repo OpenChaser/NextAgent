@@ -218,6 +218,12 @@ export function ChatArea() {
     setIsModelOpen(willOpen)
   }
 
+  const handleNewConversation = () => {
+    if (isSending) return
+    window.electronAPI.resetSession()
+    setMessages([])
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full bg-white">
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -295,8 +301,10 @@ export function ChatArea() {
 
           <div className="flex items-center justify-between mt-3">
             <button
+              onClick={handleNewConversation}
               className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
               disabled={isSending}
+              title="新建对话"
             >
               <Plus className="w-5 h-5 text-gray-500" />
             </button>

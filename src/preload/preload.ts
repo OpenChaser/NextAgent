@@ -64,6 +64,15 @@ interface Skill extends SkillFile {
   dir: string
 }
 
+interface MemoryEntry {
+  id: string
+  agentId: string
+  content: string
+  type: 'fact' | 'summary'
+  tags?: string[]
+  createdAt: number
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   sendChatMessage: (params: SendChatMessageParams) => ipcRenderer.send('chat:send', params),
@@ -81,6 +90,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('chat:done')
     ipcRenderer.removeAllListeners('chat:error')
   },
+  resetSession: () => ipcRenderer.send('chat:reset'),
   getModels: () => ipcRenderer.invoke('models:get'),
   addModel: (model: Model) => ipcRenderer.invoke('models:add', model),
   getMcpServers: () => ipcRenderer.invoke('mcp:get'),
@@ -99,4 +109,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('skills:save', { skill, target }) as Promise<boolean>,
   deleteSkill: (source: SkillSource, name: string) =>
     ipcRenderer.invoke('skills:delete', { source, name }) as Promise<boolean>,
+  getMemories: () => ipcRenderer.invoke('memory:get') as Promise<MemoryEntry[]>,
+  addMemory: (entry: { agentId: string; content: string; tags?: string[] }) =>
+    ipcRenderer.invoke('memory:add', entry) as Promise<MemoryEntry | null>,
+  deleteMemory: (id: string) => ipcRenderer.invoke('memory:delete', id) as Promise<boolean>,
 })
