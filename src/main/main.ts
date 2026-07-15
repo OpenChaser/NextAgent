@@ -29,6 +29,8 @@ process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 let mainWindow: BrowserWindow | null = null
 
+let activeChatAbort: AbortController | null = null
+
 function readJsonFileSync<T>(filePath: string): T | null {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8')
@@ -618,6 +620,12 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
   }
 
   const mcpManager = new McpManager()
+  const abortController = new AbortController()
+  activeChatAbort = abortController
+  const signal = abortController.signal
+  let totalPromptTokens = 0
+  let totalCompletionTokens = 0
+  let totalTokens = 0
   try {
     await mcpManager.connectAll()
     const client = new OpenAI({
@@ -656,10 +664,6 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     messages.push(...sess.recentTurns)
     const payloadLen = messages.length
 
-    let totalPromptTokens = 0
-    let totalCompletionTokens = 0
-    let totalTokens = 0
-
     const MAX_TOKENS_LIMIT = 393216
     const effectiveMaxTokens =
       agentMaxTokens !== undefined && Number.isFinite(agentMaxTokens) && agentMaxTokens > 0
@@ -682,6 +686,8 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     }
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      if (signal.aborted) break
+
       const stream = await client.chat.completions.create({
         model: effectiveModel,
         messages: messages,
@@ -690,13 +696,14 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
         stream_options: { include_usage: true },
         ...(agentTemperature !== undefined ? { temperature: agentTemperature } : {}),
         ...(effectiveMaxTokens !== undefined ? { max_tokens: effectiveMaxTokens } : {}),
-      })
+      }, { signal })
 
       let contentBuffer = ''
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const toolCallsBuffer = new Map<number, { id: string; name: string; arguments: string }>()
 
       for await (const chunk of stream) {
+        if (signal.aborted) break
         const delta = chunk.choices[0]?.delta
 
         // 流式文本内容
@@ -743,6 +750,7 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
 
         // 执行所有工具
         for (const tc of toolCalls) {
+          if (signal.aborted) break
           let toolArgs: Record<string, unknown> = {}
           try {
             toolArgs = JSON.parse(tc.arguments)
@@ -767,6 +775,7 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
           })
         }
 
+        if (signal.aborted) break
         continue
       }
 
@@ -795,12 +804,34 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
       max_input_tokens: modelConfig?.max_input_tokens,
     })
   } catch (error) {
-    console.error('OpenAI API call failed:', error)
-    win.send('chat:error', {
-      message: error instanceof Error ? error.message : '未知错误',
-    })
+    if (signal.aborted) {
+      console.log('[Chat] Generation stopped by user')
+      win.send('chat:done', {
+        usage: {
+          prompt_tokens: totalPromptTokens,
+          completion_tokens: totalCompletionTokens,
+          total_tokens: totalTokens,
+        },
+        max_input_tokens: modelConfig?.max_input_tokens,
+      })
+    } else {
+      console.error('OpenAI API call failed:', error)
+      win.send('chat:error', {
+        message: error instanceof Error ? error.message : '未知错误',
+      })
+    }
   } finally {
+    if (activeChatAbort === abortController) {
+      activeChatAbort = null
+    }
     await mcpManager.disconnectAll()
+  }
+})
+
+ipcMain.on('chat:stop', () => {
+  if (activeChatAbort) {
+    console.log('[Chat] Aborting active chat generation')
+    activeChatAbort.abort()
   }
 })
 

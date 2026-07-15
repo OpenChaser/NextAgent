@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Loader2, Sparkles } from 'lucide-react'
+import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
 import { PermissionPopover } from './PermissionPopover'
@@ -224,6 +224,10 @@ export function ChatArea() {
     setMessages([])
   }
 
+  const handleStop = () => {
+    window.electronAPI.stopChatMessage()
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full bg-white">
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -335,12 +339,13 @@ export function ChatArea() {
               </button>
 
               <button
-                onClick={handleSend}
+                onClick={isSending ? handleStop : handleSend}
                 className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!message.trim() || isSending}
+                disabled={!isSending && !message.trim()}
+                title={isSending ? '停止生成' : '发送消息'}
               >
                 {isSending ? (
-                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  <Square className="w-5 h-5 text-white" />
                 ) : (
                   <Send className="w-5 h-5 text-white" />
                 )}
