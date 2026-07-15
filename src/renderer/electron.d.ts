@@ -95,6 +95,7 @@ interface Skill extends SkillFile {
 interface ElectronAPI {
   getAppVersion: () => Promise<string>
   sendChatMessage: (params: SendChatMessageParams) => void
+  stopChatMessage: () => void
   onChatChunk: (callback: (data: { content: string }) => void) => void
   onChatToolCall: (callback: (data: ToolCallRecord) => void) => void
   onChatDone: (callback: (data: ChatDoneData) => void) => void
