@@ -35,6 +35,31 @@ interface Message {
   tool_calls?: ToolCallRecord[]
 }
 
+function ToolCallItem({ tc }: { tc: ToolCallRecord }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="text-xs bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-1 font-medium text-gray-600 px-2 py-1.5 hover:bg-gray-100"
+      >
+        <ChevronDown
+          size={14}
+          className={`transition-transform shrink-0 ${expanded ? 'rotate-180' : '-rotate-90'}`}
+        />
+        <span className="truncate">🔧 {tc.name}</span>
+      </button>
+      {expanded && (
+        <div className="px-2 pb-2 space-y-1">
+          <div className="text-gray-400">参数: {tc.arguments.length > 200 ? tc.arguments.substring(0, 200) + '...' : tc.arguments}</div>
+          <div className="text-gray-400">结果: {tc.result.length > 200 ? tc.result.substring(0, 200) + '...' : tc.result}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ChatArea() {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
@@ -499,11 +524,7 @@ export function ChatArea() {
               {msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {msg.tool_calls.map((tc, idx) => (
-                    <div key={idx} className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-2">
-                      <div className="font-medium text-gray-600">🔧 {tc.name}</div>
-                      <div className="text-gray-400 mt-1">参数: {tc.arguments.length > 200 ? tc.arguments.substring(0, 200) + '...' : tc.arguments}</div>
-                      <div className="text-gray-400 mt-1">结果: {tc.result.length > 200 ? tc.result.substring(0, 200) + '...' : tc.result}</div>
-                    </div>
+                    <ToolCallItem key={idx} tc={tc} />
                   ))}
                 </div>
               )}
@@ -601,20 +622,20 @@ export function ChatArea() {
                 <span className="text-sm text-blue-600 font-medium">{selectedModel}</span>
                 <ChevronDown className="w-4 h-4 text-blue-500" />
               </button>
-
-              <button
-                onClick={isSending ? handleStop : handleSend}
-                className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!isSending && (!message.trim() || selectedAgents.length === 0)}
-                title={isSending ? '停止生成' : '发送消息'}
-              >
-                {isSending ? (
-                  <Square className="w-5 h-5 text-white" />
-                ) : (
-                  <Send className="w-5 h-5 text-white" />
-                )}
-              </button>
             </div>
+
+            <button
+              onClick={isSending ? handleStop : handleSend}
+              className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!isSending && (!message.trim() || selectedAgents.length === 0)}
+              title={isSending ? '停止生成' : '发送消息'}
+            >
+              {isSending ? (
+                <Square className="w-5 h-5 text-white" />
+              ) : (
+                <Send className="w-5 h-5 text-white" />
+              )}
+            </button>
           </div>
 
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
