@@ -1,10 +1,7 @@
-allowBuilds:
-  electron: false
-  electron-winstaller: set this to true or false
-  esbuild: false
-
 packages:
   - "."
 
-overrides:
-  semver: ^5.7.2
+allowBuilds:
+  electron-winstaller: false
+  electron: false
+  esbuild: false
