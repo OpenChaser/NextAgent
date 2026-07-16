@@ -6,6 +6,7 @@ import OpenAI from 'openai'
 import { getToolDefinitions, executeTool } from './tools'
 import { showAbout } from './about'
 import { McpManager } from './mcp/mcpManager'
+import { runGroupChat, resetGroupSession } from './groupChat'
 import { ensureSkillsDirs, loadSkills, loadGlobalSkills, saveSkill, deleteSkill } from './skills'
 import type { SkillFile, SkillSource } from './skills'
 import {
@@ -536,6 +537,19 @@ ipcMain.handle('agents:setSelected', (_event, agentId: string) => {
   return true
 })
 
+ipcMain.handle('agents:getSelectedAgents', () => {
+  const prefs = readPreferences()
+  const ids = prefs.selectedAgentIds
+  return Array.isArray(ids) ? (ids as string[]) : []
+})
+
+ipcMain.handle('agents:setSelectedAgents', (_event, agentIds: string[]) => {
+  const prefs = readPreferences()
+  prefs.selectedAgentIds = agentIds
+  writePreferences(prefs)
+  return true
+})
+
 ipcMain.handle('memory:get', () => {
   return getAllMemories()
 })
@@ -558,17 +572,80 @@ ipcMain.handle('memory:delete', (_event, id: string) => {
 
 ipcMain.on('chat:reset', () => {
   resetSession()
+  resetGroupSession()
 })
 
 interface ChatMessageParams {
   message: string
   model: string
   agentId?: string
+  agentIds?: string[]
+  mentionAgentId?: string
 }
 
 ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
-  const { message, model, agentId } = params
+  const { message, model, agentId, agentIds, mentionAgentId } = params
   const win = event.sender
+
+  // 多智能体群聊模式：选中 2 个及以上智能体时走群聊编排器
+  if (agentIds && agentIds.length >= 2) {
+    ensureModelsFile()
+    const loadedProviders = readJsonFileSync<Model[]>(getModelsFilePath())
+    if (!loadedProviders) {
+      win.send('chat:error', { message: '错误：无法读取模型配置文件' })
+      return
+    }
+    const provider = loadedProviders.find((p) => p.models.some((m) => m.name === model))
+    if (!provider) {
+      win.send('chat:error', { message: `错误：未找到模型 "${model}" 对应的配置` })
+      return
+    }
+    const modelConfig = provider.models.find((m) => m.name === model)
+    if (!provider.key) {
+      win.send('chat:error', { message: `错误：模型提供商 "${provider.name}" 未配置 API Key，请在模型配置中填写` })
+      return
+    }
+    const mcpManager = new McpManager()
+    const abortController = new AbortController()
+    activeChatAbort = abortController
+    const signal = abortController.signal
+    try {
+      await mcpManager.connectAll()
+      const client = new OpenAI({ baseURL: provider.url, apiKey: provider.key })
+      const tools = [...getToolDefinitions(), ...mcpManager.getToolDefinitions()]
+      ensureAgentsFile()
+      const agents = readJsonFileSync<AgentConfig[]>(getAgentsFilePath()) ?? []
+      await runGroupChat(
+        { message, agentIds, mentionAgentId },
+        {
+          win,
+          client,
+          mcpManager,
+          tools,
+          agents,
+          effectiveModel: model,
+          modelConfig,
+          signal,
+          recallMemories,
+          formatMemoriesForInjection,
+          executeTool,
+        }
+      )
+    } catch (error) {
+      if (signal.aborted) {
+        console.log('[Chat] Group chat stopped by user')
+      } else {
+        console.error('Group chat failed:', error)
+        win.send('chat:error', { message: error instanceof Error ? error.message : '未知错误' })
+      }
+    } finally {
+      if (activeChatAbort === abortController) {
+        activeChatAbort = null
+      }
+      await mcpManager.disconnectAll()
+    }
+    return
+  }
 
   // 解析智能体配置（若指定），用于注入 systemPrompt / temperature / maxTokens / model
   let agentSystemPrompt = ''

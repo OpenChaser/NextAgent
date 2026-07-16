@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square } from 'lucide-react'
+import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
 import { PermissionPopover } from './PermissionPopover'
@@ -14,10 +14,21 @@ interface Workspace {
   path: string
 }
 
+interface MentionRecord {
+  fromAgentId: string
+  fromAgentName: string
+  toAgentId: string
+  toAgentName: string
+  task: string
+}
+
 interface Message {
   id: string
   content: string
   role: 'user' | 'assistant'
+  speakerAgentId?: string
+  speakerAgentName?: string
+  mentions?: MentionRecord[]
   model?: string
   usage?: ChatUsage
   tool_calls?: ToolCallRecord[]
@@ -34,7 +45,12 @@ export function ChatArea() {
   const [isAgentOpen, setIsAgentOpen] = useState(false)
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null)
   const [selectedModel, setSelectedModel] = useState('deepseek-v4-flash')
-  const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null)
+  const [selectedAgents, setSelectedAgents] = useState<AgentConfig[]>([])
+  const [mentionAgentId, setMentionAgentId] = useState<string | null>(null)
+  const [isMentionPickerOpen, setIsMentionPickerOpen] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionError, setMentionError] = useState<string | null>(null)
+  const [mentionHighlightIndex, setMentionHighlightIndex] = useState(0)
   const [lastPromptTokens, setLastPromptTokens] = useState(0)
   const [lastCompletionTokens, setLastCompletionTokens] = useState(0)
   const [totalPromptTokens, setTotalPromptTokens] = useState(0)
@@ -45,39 +61,70 @@ export function ChatArea() {
   const modelButtonRef = useRef<HTMLButtonElement>(null)
   const agentButtonRef = useRef<HTMLButtonElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const mentionListRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
   useEffect(() => {
-    const loadSelectedAgent = async () => {
+    const loadSelectedAgents = async () => {
       try {
         const agents = await window.electronAPI.getAgents()
-        const savedId = await window.electronAPI.getSelectedAgent()
-        let agent: AgentConfig | null = null
-        if (savedId) {
-          agent = agents.find((a) => a.id === savedId) || null
+        const savedIds = await window.electronAPI.getSelectedAgents()
+        let picked: AgentConfig[] = []
+        if (savedIds && savedIds.length > 0) {
+          picked = agents.filter((a) => savedIds.includes(a.id))
         }
-        if (!agent && agents.length > 0) {
-          agent = agents[0]
-          await window.electronAPI.setSelectedAgent(agent.id)
-        }
-        if (agent) {
-          setSelectedAgent(agent)
-          if (agent.model) {
-            setSelectedModel(agent.model)
+        if (picked.length === 0) {
+          const savedSingleId = await window.electronAPI.getSelectedAgent()
+          if (savedSingleId) {
+            const a = agents.find((x) => x.id === savedSingleId)
+            if (a) picked = [a]
           }
         }
+        if (picked.length === 0 && agents.length > 0) {
+          picked = [agents[0]]
+          await window.electronAPI.setSelectedAgents(picked.map((a) => a.id))
+        }
+        if (picked.length > 0) {
+          setSelectedAgents(picked)
+          const withModel = picked.find((a) => a.model)
+          if (withModel) setSelectedModel(withModel.model)
+        }
       } catch (error) {
-        console.error('Failed to load selected agent:', error)
+        console.error('Failed to load selected agents:', error)
       }
     }
-    loadSelectedAgent()
+    loadSelectedAgents()
   }, [])
+
+  const isGroup = selectedAgents.length >= 2
+  const filteredMentionAgents = isMentionPickerOpen
+    ? selectedAgents.filter((a) => a.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    : []
+
+  useEffect(() => {
+    if (mentionHighlightIndex >= filteredMentionAgents.length && filteredMentionAgents.length > 0) {
+      setMentionHighlightIndex(0)
+    }
+  }, [filteredMentionAgents.length, mentionHighlightIndex])
+
+  useEffect(() => {
+    if (!isMentionPickerOpen || !mentionListRef.current) return
+    const el = mentionListRef.current.querySelector('[data-highlight="true"]') as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [mentionHighlightIndex, isMentionPickerOpen, mentionQuery])
 
   const handleSend = async () => {
     if (!message.trim() || isSending) return
+
+    // 群聊模式：必须通过 @ 指定首响应智能体，否则不允许发送
+    if (isGroup && !mentionAgentId) {
+      setMentionError('群聊模式下，请输入 @ 指定一位智能体后再发送消息')
+      return
+    }
+    setMentionError(null)
 
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
@@ -89,31 +136,98 @@ export function ChatArea() {
     setMessage('')
     setIsSending(true)
     closeAllPopovers()
+    setIsMentionPickerOpen(false)
 
-    const assistantId = `msg-${Date.now()}-resp`
-    const assistantMessage: Message = {
-      id: assistantId,
-      content: '',
-      role: 'assistant',
-      model: selectedModel,
-      tool_calls: [],
+    const speakerToMsgId = new Map<string, string>()
+
+    const ensureAssistantFor = (agentId: string, agentName: string): string => {
+      let id = speakerToMsgId.get(agentId)
+      if (!id) {
+        id = `msg-${Date.now()}-${agentId}`
+        const placeholder: Message = {
+          id,
+          content: '',
+          role: 'assistant',
+          speakerAgentId: agentId,
+          speakerAgentName: agentName,
+          model: selectedModel,
+          tool_calls: [],
+          mentions: isGroup ? [] : undefined,
+        }
+        setMessages((prev) => [...prev, placeholder])
+        speakerToMsgId.set(agentId, id)
+      }
+      return id
     }
-    setMessages((prev) => [...prev, assistantMessage])
 
-    // 设置流式事件监听
+    let singleAssistantId: string | null = null
+    if (!isGroup) {
+      singleAssistantId = `msg-${Date.now()}-resp`
+      const agent = selectedAgents[0]
+      const placeholder: Message = {
+        id: singleAssistantId,
+        content: '',
+        role: 'assistant',
+        speakerAgentId: agent?.id,
+        speakerAgentName: agent?.name,
+        model: selectedModel,
+        tool_calls: [],
+      }
+      setMessages((prev) => [...prev, placeholder])
+    }
+
+    window.electronAPI.onChatSpeaker((data) => {
+      ensureAssistantFor(data.agentId, data.agentName)
+    })
+
     window.electronAPI.onChatChunk((data) => {
+      let targetId: string | null = null
+      if (isGroup && data.agentId) {
+        targetId = speakerToMsgId.get(data.agentId) ?? null
+        if (!targetId && data.agentName) {
+          targetId = ensureAssistantFor(data.agentId, data.agentName)
+        }
+      } else {
+        targetId = singleAssistantId
+      }
+      if (!targetId) return
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: m.content + data.content } : m
+          m.id === targetId ? { ...m, content: m.content + data.content } : m
+        )
+      )
+    })
+
+    window.electronAPI.onChatMention((data) => {
+      const fromId = speakerToMsgId.get(data.fromAgentId)
+      if (!fromId) return
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === fromId
+            ? { ...m, mentions: [...(m.mentions || []), data] }
+            : m
         )
       )
     })
 
     window.electronAPI.onChatToolCall((data) => {
+      let targetId: string | null = null
+      if (isGroup && data.agentId) {
+        targetId = speakerToMsgId.get(data.agentId) ?? null
+      } else {
+        targetId = singleAssistantId
+      }
+      if (!targetId) return
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId
-            ? { ...m, tool_calls: [...(m.tool_calls || []), data] }
+          m.id === targetId
+            ? {
+                ...m,
+                tool_calls: [
+                  ...(m.tool_calls || []),
+                  { name: data.name, arguments: data.arguments, result: data.result },
+                ],
+              }
             : m
         )
       )
@@ -134,24 +248,61 @@ export function ChatArea() {
     })
 
     window.electronAPI.onChatError((data) => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId ? { ...m, content: `发送失败：${data.message}` } : m
+      setMessages((prev) => {
+        const targetId = isGroup
+          ? Array.from(speakerToMsgId.values()).pop() ?? null
+          : singleAssistantId
+        if (!targetId) return prev
+        return prev.map((m) =>
+          m.id === targetId ? { ...m, content: `发送失败：${data.message}` } : m
         )
-      )
+      })
       setIsSending(false)
       window.electronAPI.removeChatListeners()
     })
 
-    // 发送消息（流式，无需等待返回值）
-    window.electronAPI.sendChatMessage({
-      message: userMessage.content,
-      model: selectedAgent?.model || selectedModel,
-      agentId: selectedAgent?.id,
-    })
+    const effectiveModel = selectedAgents.find((a) => a.model)?.model || selectedModel
+    if (isGroup) {
+      window.electronAPI.sendChatMessage({
+        message: userMessage.content,
+        model: effectiveModel,
+        agentIds: selectedAgents.map((a) => a.id),
+        mentionAgentId: mentionAgentId || undefined,
+      })
+      setMentionAgentId(null)
+    } else {
+      window.electronAPI.sendChatMessage({
+        message: userMessage.content,
+        model: effectiveModel,
+        agentId: selectedAgents[0]?.id,
+      })
+    }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isMentionPickerOpen && filteredMentionAgents.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionHighlightIndex((prev) => (prev + 1) % filteredMentionAgents.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionHighlightIndex((prev) => (prev - 1 + filteredMentionAgents.length) % filteredMentionAgents.length)
+        return
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        const idx = Math.min(mentionHighlightIndex, filteredMentionAgents.length - 1)
+        handlePickMention(filteredMentionAgents[idx])
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setIsMentionPickerOpen(false)
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
@@ -168,13 +319,45 @@ export function ChatArea() {
     setIsModelOpen(false)
   }
 
-  const handleSelectAgent = (agent: AgentConfig) => {
-    setSelectedAgent(agent)
-    if (agent.model) {
-      setSelectedModel(agent.model)
+  const handleToggleAgent = (agent: AgentConfig) => {
+    setSelectedAgents((prev) => {
+      const exists = prev.some((a) => a.id === agent.id)
+      const next = exists ? prev.filter((a) => a.id !== agent.id) : [...prev, agent]
+      window.electronAPI.setSelectedAgents(next.map((a) => a.id))
+      const withModel = next.find((a) => a.model)
+      if (withModel) setSelectedModel(withModel.model)
+      return next
+    })
+    setMentionAgentId((prev) => (prev === agent.id ? null : prev))
+    setMentionError(null)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setMessage(val)
+    if (!isGroup) {
+      setIsMentionPickerOpen(false)
+      return
     }
-    window.electronAPI.setSelectedAgent(agent.id)
-    setIsAgentOpen(false)
+    const match = /(?:^|\s)@([^\s]*)$/.exec(val)
+    if (match) {
+      setMentionQuery(match[1])
+      setIsMentionPickerOpen(true)
+      setMentionHighlightIndex(0)
+    } else {
+      setIsMentionPickerOpen(false)
+      if (!val.includes('@')) {
+        setMentionAgentId(null)
+        setMentionError(null)
+      }
+    }
+  }
+
+  const handlePickMention = (agent: AgentConfig) => {
+    setMessage((prev) => prev.replace(/(?:^|\s)@[^\s]*$/, ` @${agent.name} `))
+    setMentionAgentId(agent.id)
+    setIsMentionPickerOpen(false)
+    setMentionError(null)
   }
 
   const closeAllPopovers = () => {
@@ -222,6 +405,9 @@ export function ChatArea() {
     if (isSending) return
     window.electronAPI.resetSession()
     setMessages([])
+    setMentionAgentId(null)
+    setIsMentionPickerOpen(false)
+    setMentionError(null)
   }
 
   const handleStop = () => {
@@ -250,6 +436,25 @@ export function ChatArea() {
               )}
             </div>
             <div className="flex flex-col max-w-[70%]">
+              {msg.role === 'assistant' && msg.speakerAgentName && (
+                <span className="text-xs text-gray-500 mb-1 ml-1 font-medium">
+                  {msg.speakerAgentName}
+                </span>
+              )}
+              {msg.role === 'assistant' && msg.mentions && msg.mentions.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {msg.mentions.map((mn, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-600 border border-purple-200 rounded-full px-2 py-0.5"
+                    >
+                      <AtSign className="w-3 h-3" />
+                      {mn.toAgentName}
+                      <span className="text-purple-400">· {mn.task.length > 40 ? mn.task.substring(0, 40) + '...' : mn.task}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div
                 className={`px-4 py-3 rounded-xl ${
                   msg.role === 'user'
@@ -293,15 +498,47 @@ export function ChatArea() {
 
       <div className="p-6">
         <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="今天帮你做些什么？@ 引用对话文件，/ 调用技能与指令"
-            className="w-full bg-transparent resize-none outline-none text-gray-700 placeholder-gray-400 text-base min-h-[60px] max-h-[200px]"
-            rows={3}
-            disabled={isSending}
-          />
+          {isGroup && mentionError && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+              <AtSign className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{mentionError}</span>
+            </div>
+          )}
+          <div className="relative">
+            {isMentionPickerOpen && (
+              <div ref={mentionListRef} className="absolute bottom-full mb-2 left-0 w-[240px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-[200px] overflow-y-auto">
+                {filteredMentionAgents.map((agent, idx) => (
+                  <button
+                    key={agent.id}
+                    onClick={() => handlePickMention(agent)}
+                    onMouseEnter={() => setMentionHighlightIndex(idx)}
+                    data-highlight={idx === mentionHighlightIndex}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left ${
+                      idx === mentionHighlightIndex ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <Bot className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm text-gray-700 truncate">{agent.name}</div>
+                      <div className="text-xs text-gray-400 truncate">{agent.description}</div>
+                    </div>
+                  </button>
+                ))}
+                {filteredMentionAgents.length === 0 && (
+                  <div className="px-3 py-3 text-xs text-gray-400 text-center">未找到匹配的智能体</div>
+                )}
+              </div>
+            )}
+            <textarea
+              value={message}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={isGroup ? '群聊模式：请输入 @ 指定首响应智能体后再发送' : '今天帮你做些什么？@ 引用对话文件，/ 调用技能与指令'}
+              className="w-full bg-transparent resize-none outline-none text-gray-700 placeholder-gray-400 text-base min-h-[60px] max-h-[200px]"
+              rows={3}
+              disabled={isSending}
+            />
+          </div>
 
           <div className="flex items-center justify-between mt-3">
             <button
@@ -322,7 +559,11 @@ export function ChatArea() {
               >
                 <Sparkles className="w-4 h-4 text-indigo-500" />
                 <span className="text-sm text-indigo-600 font-medium">
-                  {selectedAgent ? selectedAgent.name : '选择智能体'}
+                  {selectedAgents.length === 0
+                    ? '选择智能体'
+                    : selectedAgents.length === 1
+                    ? selectedAgents[0].name
+                    : `${selectedAgents.length} 个智能体 · 群聊`}
                 </span>
                 <ChevronDown className="w-4 h-4 text-indigo-500" />
               </button>
@@ -415,8 +656,9 @@ export function ChatArea() {
         alignRight
       >
         <AgentPopover
-          selectedAgentId={selectedAgent?.id || null}
-          onSelectAgent={handleSelectAgent}
+          selectedAgentIds={selectedAgents.map((a) => a.id)}
+          onToggleAgent={handleToggleAgent}
+          onClose={() => setIsAgentOpen(false)}
         />
       </Popover>
 

@@ -4,6 +4,8 @@ interface SendChatMessageParams {
   message: string
   model: string
   agentId?: string
+  agentIds?: string[]
+  mentionAgentId?: string
 }
 
 interface ModelConfig {
@@ -77,10 +79,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   sendChatMessage: (params: SendChatMessageParams) => ipcRenderer.send('chat:send', params),
   stopChatMessage: () => ipcRenderer.send('chat:stop'),
-  onChatChunk: (callback: (data: { content: string }) => void) =>
+  onChatChunk: (callback: (data: { content: string; agentId?: string; agentName?: string }) => void) =>
     ipcRenderer.on('chat:chunk', (_event, data) => callback(data)),
-  onChatToolCall: (callback: (data: { name: string; arguments: string; result: string }) => void) =>
+  onChatToolCall: (callback: (data: { name: string; arguments: string; result: string; agentId?: string }) => void) =>
     ipcRenderer.on('chat:tool_call', (_event, data) => callback(data)),
+  onChatSpeaker: (callback: (data: { agentId: string; agentName: string }) => void) =>
+    ipcRenderer.on('chat:speaker', (_event, data) => callback(data)),
+  onChatMention: (callback: (data: { fromAgentId: string; fromAgentName: string; toAgentId: string; toAgentName: string; task: string }) => void) =>
+    ipcRenderer.on('chat:mention', (_event, data) => callback(data)),
   onChatDone: (callback: (data: { usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }; max_input_tokens?: number }) => void) =>
     ipcRenderer.on('chat:done', (_event, data) => callback(data)),
   onChatError: (callback: (data: { message: string }) => void) =>
@@ -88,6 +94,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeChatListeners: () => {
     ipcRenderer.removeAllListeners('chat:chunk')
     ipcRenderer.removeAllListeners('chat:tool_call')
+    ipcRenderer.removeAllListeners('chat:speaker')
+    ipcRenderer.removeAllListeners('chat:mention')
     ipcRenderer.removeAllListeners('chat:done')
     ipcRenderer.removeAllListeners('chat:error')
   },
@@ -104,6 +112,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteAgent: (agentId: string) => ipcRenderer.invoke('agents:delete', agentId),
   getSelectedAgent: () => ipcRenderer.invoke('agents:getSelected'),
   setSelectedAgent: (agentId: string) => ipcRenderer.invoke('agents:setSelected', agentId),
+  getSelectedAgents: () => ipcRenderer.invoke('agents:getSelectedAgents'),
+  setSelectedAgents: (agentIds: string[]) => ipcRenderer.invoke('agents:setSelectedAgents', agentIds),
   getSkills: () => ipcRenderer.invoke('skills:get') as Promise<Skill[]>,
   getGlobalSkills: () => ipcRenderer.invoke('skills:getGlobal') as Promise<Skill[]>,
   saveSkill: (skill: SkillFile, target: SkillSource) =>

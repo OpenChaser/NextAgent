@@ -263,3 +263,17 @@ if (agentId) {
 | `src/renderer/components/AgentPopover.tsx` | agent 选择下拉 UI |
 | `src/renderer/components/AgentConfigView.tsx` | agent 编辑/删除 UI(builtin 保护) |
 | `src/renderer/components/ChatArea.tsx` | selectedAgent 状态与发送时传 agentId |
+
+## 十二、多 Agent 群聊协同
+
+在单 Agent 对话之上新增「多 Agent 群聊」模式，详见 [multi-agent-group-design.md](./multi-agent-group-design.md)。要点：
+
+- **自动模式切换**：`AgentPopover` 改为多选，渲染层状态由 `selectedAgent: AgentConfig | null` 升级为 `selectedAgents: AgentConfig[]`。选 1 个走原单 Agent 路径；选 ≥2 个进入群聊编排路径（`chat:send` 顶部 `if (agentIds && agentIds.length >= 2)` 分流到 `runGroupChat`）。
+- **持久化**：`preferences.json` 新增 `selectedAgentIds: string[]`（IPC `agents:getSelectedAgents` / `agents:setSelectedAgents`），与旧 `selectedAgentId` 并存，启动加载优先读数组、回退单选。
+- **Roster 花名册**：每个 Agent 的 systemPrompt 前注入群成员清单与自身身份，使每个 Agent 都知道其他成员存在及其职责。
+- **共享上下文**：群聊维护一份共享 transcript（`src/main/groupChat.ts` 的 `groupTranscript`），各 Agent 发言时能看到所有发言；长期记忆仍按 agentId 隔离。
+- **委派工具**：`delegate_to_agent(targetAgentId, task)` 由群聊编排器拦截（不入 `executeTool`），记录 delegation、入队、发 `chat:mention`；前端把该调用渲染为「@AgentName」芯片，模拟微信群 @。
+- **轮转与安全阀**：任务队列驱动轮转，全局 `MAX_GROUP_TURNS = 12` 防死循环，单 Agent 轮 `MAX_ROUNDS_PER_AGENT = 10`。
+
+新增/涉及文件：`src/main/groupChat.ts`、`src/main/tools/delegateAgent.ts`、`src/main/tools/index.ts`（注册）、`src/main/main.ts`（分流 + IPC + reset）、`src/preload/preload.ts`（事件桥接）、`src/renderer/electron.d.ts`（类型）、`src/renderer/components/AgentPopover.tsx`（多选）、`src/renderer/components/ChatArea.tsx`（状态/流程/渲染/输入框 @）。
+

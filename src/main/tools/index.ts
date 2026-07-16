@@ -8,6 +8,7 @@ import { searchContentTool } from './searchContent'
 import { runCommandTool } from './runCommand'
 import { gitStatusTool } from './gitStatus'
 import { saveMemoryTool, recallMemoryTool, listMemoryTool, deleteMemoryTool } from './memory'
+import { delegateAgentTool } from './delegateAgent'
 
 // 所有工具定义
 export const allTools: ToolDefinition[] = [
@@ -23,6 +24,7 @@ export const allTools: ToolDefinition[] = [
   recallMemoryTool,
   listMemoryTool,
   deleteMemoryTool,
+  delegateAgentTool,
 ]
 
 // 工具执行器映射
