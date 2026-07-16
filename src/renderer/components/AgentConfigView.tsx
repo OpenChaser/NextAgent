@@ -6,6 +6,7 @@ const emptyAgent: AgentConfig = {
   name: '',
   description: '',
   systemPrompt: '',
+  emoji: '',
   model: '',
   temperature: 0.7,
   maxTokens: 4096,
@@ -148,6 +149,21 @@ export function AgentConfigView() {
               </div>
             </div>
 
+            <div className="flex items-end gap-3">
+              <div className="w-24">
+                <label className="block text-sm font-medium text-gray-700 mb-1">图标 Emoji</label>
+                <input
+                  type="text"
+                  value={form.emoji || ''}
+                  onChange={(e) => setForm({ ...form, emoji: e.target.value })}
+                  placeholder="🤖"
+                  maxLength={4}
+                  className="w-full px-3 py-2 text-sm text-center bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
+                />
+              </div>
+              <p className="text-xs text-gray-400 pb-2">留空则使用默认 Bot 图标</p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">系统提示词</label>
               <textarea
@@ -256,7 +272,11 @@ export function AgentConfigView() {
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Bot className="w-4 h-4 text-indigo-500" />
+                      {agent.emoji ? (
+                        <span className="text-base leading-none">{agent.emoji}</span>
+                      ) : (
+                        <Bot className="w-4 h-4 text-indigo-500" />
+                      )}
                       <h3 className="text-sm font-medium text-gray-800">{agent.name}</h3>
                       {agent.builtin && (
                         <span className="inline-flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">

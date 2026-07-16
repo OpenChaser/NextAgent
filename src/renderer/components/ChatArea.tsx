@@ -28,6 +28,7 @@ interface Message {
   role: 'user' | 'assistant'
   speakerAgentId?: string
   speakerAgentName?: string
+  speakerAgentEmoji?: string
   mentions?: MentionRecord[]
   model?: string
   usage?: ChatUsage
@@ -118,6 +119,10 @@ export function ChatArea() {
 
   const handleSend = async () => {
     if (!message.trim() || isSending) return
+    if (selectedAgents.length === 0) {
+      setMentionError('请先选择一个智能体后再发送消息')
+      return
+    }
 
     // 群聊模式：必须通过 @ 指定首响应智能体，否则不允许发送
     if (isGroup && !mentionAgentId) {
@@ -144,12 +149,14 @@ export function ChatArea() {
       let id = speakerToMsgId.get(agentId)
       if (!id) {
         id = `msg-${Date.now()}-${agentId}`
+        const agentEmoji = selectedAgents.find((a) => a.id === agentId)?.emoji
         const placeholder: Message = {
           id,
           content: '',
           role: 'assistant',
           speakerAgentId: agentId,
           speakerAgentName: agentName,
+          speakerAgentEmoji: agentEmoji,
           model: selectedModel,
           tool_calls: [],
           mentions: isGroup ? [] : undefined,
@@ -170,6 +177,7 @@ export function ChatArea() {
         role: 'assistant',
         speakerAgentId: agent?.id,
         speakerAgentName: agent?.name,
+        speakerAgentEmoji: agent?.emoji,
         model: selectedModel,
         tool_calls: [],
       }
@@ -431,6 +439,8 @@ export function ChatArea() {
             >
               {msg.role === 'user' ? (
                 <User className="w-4 h-4" />
+              ) : msg.speakerAgentEmoji ? (
+                <span className="text-base leading-none">{msg.speakerAgentEmoji}</span>
               ) : (
                 <Bot className="w-4 h-4" />
               )}
@@ -498,10 +508,10 @@ export function ChatArea() {
 
       <div className="p-6">
         <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
-          {isGroup && mentionError && (
+          {(selectedAgents.length === 0 || mentionError) && (
             <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
               <AtSign className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>{mentionError}</span>
+              <span>{selectedAgents.length === 0 ? '请先选择一个智能体后再发送消息' : mentionError}</span>
             </div>
           )}
           <div className="relative">
@@ -517,7 +527,11 @@ export function ChatArea() {
                       idx === mentionHighlightIndex ? 'bg-indigo-50' : 'hover:bg-gray-50'
                     }`}
                   >
-                    <Bot className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                    {agent.emoji ? (
+                      <span className="text-base leading-none flex-shrink-0">{agent.emoji}</span>
+                    ) : (
+                      <Bot className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                    )}
                     <div className="min-w-0">
                       <div className="text-sm text-gray-700 truncate">{agent.name}</div>
                       <div className="text-xs text-gray-400 truncate">{agent.description}</div>
@@ -562,7 +576,7 @@ export function ChatArea() {
                   {selectedAgents.length === 0
                     ? '选择智能体'
                     : selectedAgents.length === 1
-                    ? selectedAgents[0].name
+                    ? `${selectedAgents[0].emoji ? selectedAgents[0].emoji + ' ' : ''}${selectedAgents[0].name}`
                     : `${selectedAgents.length} 个智能体 · 群聊`}
                 </span>
                 <ChevronDown className="w-4 h-4 text-indigo-500" />
@@ -582,7 +596,7 @@ export function ChatArea() {
               <button
                 onClick={isSending ? handleStop : handleSend}
                 className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!isSending && !message.trim()}
+                disabled={!isSending && (!message.trim() || selectedAgents.length === 0)}
                 title={isSending ? '停止生成' : '发送消息'}
               >
                 {isSending ? (
