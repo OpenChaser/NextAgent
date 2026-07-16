@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
@@ -379,6 +379,23 @@ function ensureAgentsFile(): void {
     console.error('Failed to ensure built-in agents:', error)
   }
 }
+
+ipcMain.handle('workspace:openFolder', async () => {
+  const result = await dialog.showOpenDialog({
+    title: '选择项目目录',
+    properties: ['openDirectory'],
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+  const dirPath = result.filePaths[0]
+  const baseName = path.basename(dirPath)
+  return {
+    id: `local-${Date.now()}`,
+    name: baseName,
+    path: dirPath,
+  }
+})
 
 ipcMain.handle('agents:get', () => {
   ensureAgentsFile()
