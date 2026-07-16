@@ -102,7 +102,12 @@ export interface ChatTool {
 export const allTools: ToolDefinition[] = [
   readFileTool, writeFileTool, editFileTool, listDirectoryTool,
   searchFilesTool, searchContentTool, runCommandTool, gitStatusTool,
+  saveMemoryTool, recallMemoryTool, listMemoryTool, deleteMemoryTool,
+  delegateAgentTool,   // 多 Agent 群聊委派工具
 ]
+```
+
+> 其中 `delegateAgentTool`（`src/main/tools/delegateAgent.ts`）用于多 Agent 群聊协同：LLM 通过 `delegate_to_agent(targetAgentId, task)` 委派其他成员。其 `executor` 为桩函数，**真正语义在群聊编排器 [`src/main/groupChat.ts`](../../src/main/groupChat.ts) 拦截实现**（记录 delegation、入队、发 `chat:mention`）；单 Agent 模式下若被误调用，桩返回提示。详见 [multi-agent-group-design.md](./multi-agent-group-design.md)。
 
 // 模块加载时构建执行器映射
 const toolExecutorMap = new Map<string, ToolDefinition['executor']>()

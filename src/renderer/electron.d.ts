@@ -2,6 +2,8 @@ interface SendChatMessageParams {
   message: string
   model: string
   agentId?: string
+  agentIds?: string[]
+  mentionAgentId?: string
 }
 
 interface ChatUsage {
@@ -14,6 +16,32 @@ interface ToolCallRecord {
   name: string
   arguments: string
   result: string
+}
+
+interface ChatChunkData {
+  content: string
+  agentId?: string
+  agentName?: string
+}
+
+interface ChatToolCallData {
+  name: string
+  arguments: string
+  result: string
+  agentId?: string
+}
+
+interface ChatSpeakerData {
+  agentId: string
+  agentName: string
+}
+
+interface ChatMentionData {
+  fromAgentId: string
+  fromAgentName: string
+  toAgentId: string
+  toAgentName: string
+  task: string
 }
 
 interface ChatDoneData {
@@ -96,8 +124,10 @@ interface ElectronAPI {
   getAppVersion: () => Promise<string>
   sendChatMessage: (params: SendChatMessageParams) => void
   stopChatMessage: () => void
-  onChatChunk: (callback: (data: { content: string }) => void) => void
-  onChatToolCall: (callback: (data: ToolCallRecord) => void) => void
+  onChatChunk: (callback: (data: ChatChunkData) => void) => void
+  onChatToolCall: (callback: (data: ChatToolCallData) => void) => void
+  onChatSpeaker: (callback: (data: ChatSpeakerData) => void) => void
+  onChatMention: (callback: (data: ChatMentionData) => void) => void
   onChatDone: (callback: (data: ChatDoneData) => void) => void
   onChatError: (callback: (data: ChatErrorData) => void) => void
   removeChatListeners: () => void
@@ -113,6 +143,8 @@ interface ElectronAPI {
   deleteAgent: (agentId: string) => Promise<boolean>
   getSelectedAgent: () => Promise<string | null>
   setSelectedAgent: (agentId: string) => Promise<boolean>,
+  getSelectedAgents: () => Promise<string[]>
+  setSelectedAgents: (agentIds: string[]) => Promise<boolean>,
   getSkills: () => Promise<Skill[]>
   getGlobalSkills: () => Promise<Skill[]>
   saveSkill: (skill: SkillFile, target: SkillSource) => Promise<boolean>

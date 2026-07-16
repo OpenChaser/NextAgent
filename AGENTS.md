@@ -29,6 +29,7 @@ pnpm run build
 | [builtin-agent-design.md](docs/design/builtin-agent-design.md) | 内置 Agent（Plan / Build / 持久化 / 保护机制） |
 | [mcp-design.md](docs/design/mcp-design.md) | MCP（stdio / sse 双传输 / 工具前缀隔离） |
 | [skill-design.md](docs/design/skill-design.md) | SKILL（SKILL.md 格式 / gray-matter 解析 / 双层加载） |
+| [multi-agent-group-design.md](docs/design/multi-agent-group-design.md) | 多 Agent 群聊协同（多选 / Roster / 共享 transcript / delegate_to_agent / 轮转编排） |
 
 同步要求：
 

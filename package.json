@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "tsc --project tsconfig.main.json && vite build",
     "typecheck": "tsc --project tsconfig.main.json --noEmit && tsc --project tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "electron": "electron .",
     "start": "concurrently \"npm run dev\" \"npm run electron:wait\"",
     "electron:wait": "wait-on http://localhost:5173 && npm run electron",
@@ -48,6 +51,9 @@
     }
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -56,6 +62,7 @@
     "concurrently": "^8.2.2",
     "electron": "^29.0.0",
     "electron-builder": "^24.13.3",
+    "jsdom": "^24.1.0",
     "lucide-react": "^0.424.0",
     "postcss": "^8.4.41",
     "react": "^18.3.1",
@@ -63,6 +70,7 @@
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.4",
     "vite": "^5.2.0",
+    "vitest": "^2.1.0",
     "wait-on": "^9.0.10"
   },
   "dependencies": {
