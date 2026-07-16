@@ -40,6 +40,7 @@ interface AgentConfig {
   name: string            // 显示名称
   description: string     // 一句话简介
   systemPrompt: string    // 系统提示词
+  emoji?: string          // 显示图标 emoji,留空回退默认 Bot 图标
   model: string           // 指定模型;空字符串回退到用户选择
   temperature: number     // 采样温度
   maxTokens: number       // 最大输出 token
@@ -53,6 +54,7 @@ interface AgentConfig {
 | 字段 | 含义 |
 |------|------|
 | `id` | 内置 agent 用 `builtin-plan`/`builtin-build` |
+| `emoji` | 可选,显示用 emoji 图标;留空则回退默认 Bot 图标 |
 | `model` | 空字符串表示不锁定,回退到用户选定的 model |
 | `builtin` | `true` 时删除被拒(双重保护) |
 
@@ -68,6 +70,7 @@ interface AgentConfig {
 {
   id: 'builtin-plan',
   name: 'Plan',
+  emoji: '🧠',           // 规划智能体图标
   description: '规划与分析智能体:只读分析代码库,制定实现方案,不修改任何代码',
   systemPrompt: 'You are a planning agent focused on analysis and architectural design...',
   model: '',              // 不锁定模型
@@ -86,6 +89,7 @@ interface AgentConfig {
 {
   id: 'builtin-build',
   name: 'Build',
+  emoji: '🔨',           // 构建智能体图标
   description: '构建与实现智能体:编写和修改代码,执行实现方案,验证编译通过',
   systemPrompt: 'You are a build agent focused on implementing code changes...',
   model: '',
@@ -127,17 +131,28 @@ function ensureAgentsFile(): void {
     return
   }
   // missing 检测:按 id 找出缺失的内置 agent
+  let changed = false
   const missing = builtins.filter((b) => !agents.some((a) => a.id === b.id))
   if (missing.length > 0) {
     agents.push(...missing)          // 只追加,不覆盖用户自定义
-    writeJsonFileSync(filePath, agents)
+    changed = true
   }
+  // emoji 补全:已有内置 agent 若缺 emoji 或与内置定义不一致则回填
+  for (const b of builtins) {
+    const existing = agents.find((a) => a.id === b.id)
+    if (existing && existing.emoji !== b.emoji) {
+      existing.emoji = b.emoji
+      changed = true
+    }
+  }
+  if (changed) writeJsonFileSync(filePath, agents)
 }
 ```
 
 关键点:
 - **按 id 检测**:只看 id 是否存在,不校验字段内容(用户编辑过内置 agent 不会被重置)
 - **只追加**:缺失项追加,不影响已有 agent
+- **emoji 回填**:已有内置 agent 若缺 emoji 字段或与内置定义不一致,自动补齐为内置定义值(不覆盖用户自定义 agent)
 - **自动修复**:每次 agents:get 前调用,保证内置 agent 永远在位
 
 ---

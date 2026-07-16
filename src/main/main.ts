@@ -269,6 +269,7 @@ interface AgentConfig {
   name: string
   description: string
   systemPrompt: string
+  emoji?: string
   model: string
   temperature: number
   maxTokens: number
@@ -289,6 +290,7 @@ function getBuiltinAgents(): AgentConfig[] {
     {
       id: 'builtin-plan',
       name: 'Plan',
+      emoji: '🧠',
       description: '规划与分析智能体：只读分析代码库，制定实现方案，不修改任何代码',
       systemPrompt:
         'You are a planning agent focused on analysis and architectural design. Your role is to:\n\n' +
@@ -311,6 +313,7 @@ function getBuiltinAgents(): AgentConfig[] {
     {
       id: 'builtin-build',
       name: 'Build',
+      emoji: '🔨',
       description: '构建与实现智能体：编写和修改代码，执行实现方案，验证编译通过',
       systemPrompt:
         'You are a build agent focused on implementing code changes. Your role is to:\n\n' +
@@ -356,9 +359,20 @@ function ensureAgentsFile(): void {
       return
     }
     const builtins = getBuiltinAgents()
+    let changed = false
     const missing = builtins.filter((b) => !agents.some((a) => a.id === b.id))
     if (missing.length > 0) {
       agents.push(...missing)
+      changed = true
+    }
+    for (const b of builtins) {
+      const existing = agents.find((a) => a.id === b.id)
+      if (existing && existing.emoji !== b.emoji) {
+        existing.emoji = b.emoji
+        changed = true
+      }
+    }
+    if (changed) {
       writeJsonFileSync(filePath, agents)
     }
   } catch (error) {

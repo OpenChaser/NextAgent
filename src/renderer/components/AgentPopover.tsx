@@ -90,7 +90,11 @@ export function AgentPopover({ selectedAgentIds, onToggleAgent, onClose }: Agent
                 }`}
               >
                 <div className="flex items-start gap-2 min-w-0">
-                  <Bot className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
+                  {agent.emoji ? (
+                    <span className="text-base leading-none mt-0.5 flex-shrink-0">{agent.emoji}</span>
+                  ) : (
+                    <Bot className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
+                  )}
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className={`text-sm truncate ${isSelected ? 'text-blue-600' : 'text-gray-700'}`}>

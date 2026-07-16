@@ -85,6 +85,7 @@ interface AgentConfig {
   name: string
   description: string
   systemPrompt: string
+  emoji?: string
   model: string
   temperature: number
   maxTokens: number
