@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Plus, FolderOpen, RefreshCw, ChevronRight } from 'lucide-react'
+import { Search, FolderOpen, RefreshCw, ChevronRight, Trash2 } from 'lucide-react'
 
 interface Workspace {
   id: string
@@ -9,19 +9,16 @@ interface Workspace {
 
 interface WorkspacePopoverProps {
   selectedWorkspace: Workspace | null
+  workspaces: Workspace[]
   onSelectWorkspace: (workspace: Workspace) => void
+  onRemoveWorkspace: (id: string, e: React.MouseEvent) => void
 }
 
-const mockWorkspaces: Workspace[] = [
-  { id: '1', name: '项目 A', path: 'D:\\Projects\\ProjectA' },
-  { id: '2', name: '文档管理', path: 'D:\\Documents\\Docs' },
-  { id: '3', name: '开发环境', path: 'D:\\Dev\\Workspace' },
-]
-
-export function WorkspacePopover({ selectedWorkspace, onSelectWorkspace }: WorkspacePopoverProps) {
+export function WorkspacePopover({ selectedWorkspace, workspaces, onSelectWorkspace, onRemoveWorkspace }: WorkspacePopoverProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [removingId, setRemovingId] = useState<string | null>(null)
 
-  const filteredWorkspaces = mockWorkspaces.filter((w) =>
+  const filteredWorkspaces = workspaces.filter((w) =>
     w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     w.path.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -65,6 +62,50 @@ export function WorkspacePopover({ selectedWorkspace, onSelectWorkspace }: Works
                   <p className="text-sm font-medium truncate">{workspace.name}</p>
                   <p className="text-xs text-gray-400 truncate">{workspace.path}</p>
                 </div>
+                {removingId === workspace.id ? (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-xs text-red-500 mr-1">确认删除?</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRemoveWorkspace(workspace.id, e)
+                        setRemovingId(null)
+                      }}
+                      className="px-2 py-0.5 text-xs text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
+                    >
+                      删除
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setRemovingId(null)
+                      }}
+                      className="px-2 py-0.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                    >
+                      取消
+                    </button>
+                  </div>
+                ) : (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setRemovingId(workspace.id)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setRemovingId(workspace.id)
+                      }
+                    }}
+                    className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                    title="从列表删除"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -72,11 +113,15 @@ export function WorkspacePopover({ selectedWorkspace, onSelectWorkspace }: Works
       </div>
 
       <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors">
-          <Plus className="w-4 h-4" />
-          <span>新建工作空间</span>
-        </button>
-        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors">
+        <button
+          onClick={async () => {
+            const workspace = await window.electronAPI.openWorkspaceFolder()
+            if (workspace) {
+              onSelectWorkspace(workspace)
+            }
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+        >
           <FolderOpen className="w-4 h-4" />
           <span>打开本地文件夹</span>
         </button>

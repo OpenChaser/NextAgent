@@ -101,6 +101,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('chat:error')
   },
   resetSession: () => ipcRenderer.send('chat:reset'),
+  openWorkspaceFolder: () => ipcRenderer.invoke('workspace:openFolder'),
   getModels: () => ipcRenderer.invoke('models:get'),
   addModel: (model: Model) => ipcRenderer.invoke('models:add', model),
   getMcpServers: () => ipcRenderer.invoke('mcp:get'),

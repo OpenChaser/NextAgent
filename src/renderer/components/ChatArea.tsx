@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Plus, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign } from 'lucide-react'
+import { Send, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
 import { PermissionPopover } from './PermissionPopover'
@@ -45,12 +45,18 @@ export function ChatArea() {
   const [isModelConfigOpen, setIsModelConfigOpen] = useState(false)
   const [isAgentOpen, setIsAgentOpen] = useState(false)
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([
+    { id: '1', name: '项目 A', path: 'D:\\Projects\\ProjectA' },
+    { id: '2', name: '文档管理', path: 'D:\\Documents\\Docs' },
+    { id: '3', name: '开发环境', path: 'D:\\Dev\\Workspace' },
+  ])
   const [selectedModel, setSelectedModel] = useState('deepseek-v4-flash')
   const [selectedAgents, setSelectedAgents] = useState<AgentConfig[]>([])
   const [mentionAgentId, setMentionAgentId] = useState<string | null>(null)
   const [isMentionPickerOpen, setIsMentionPickerOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionError, setMentionError] = useState<string | null>(null)
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const [mentionHighlightIndex, setMentionHighlightIndex] = useState(0)
   const [lastPromptTokens, setLastPromptTokens] = useState(0)
   const [lastCompletionTokens, setLastCompletionTokens] = useState(0)
@@ -119,6 +125,11 @@ export function ChatArea() {
 
   const handleSend = async () => {
     if (!message.trim() || isSending) return
+    if (!selectedWorkspace || !selectedWorkspace.path) {
+      setWorkspaceError('请先选择项目目录后再发送消息')
+      return
+    }
+    setWorkspaceError(null)
     if (selectedAgents.length === 0) {
       setMentionError('请先选择一个智能体后再发送消息')
       return
@@ -319,7 +330,17 @@ export function ChatArea() {
 
   const handleSelectWorkspace = (workspace: Workspace) => {
     setSelectedWorkspace(workspace)
+    setWorkspaceError(null)
     setIsWorkspaceOpen(false)
+    setWorkspaces((prev) =>
+      prev.some((w) => w.path === workspace.path) ? prev : [workspace, ...prev]
+    )
+  }
+
+  const handleRemoveWorkspace = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setWorkspaces((prev) => prev.filter((w) => w.id !== id))
+    setSelectedWorkspace((prev) => (prev?.id === id ? null : prev))
   }
 
   const handleSelectModel = (model: string) => {
@@ -407,15 +428,6 @@ export function ChatArea() {
     const willOpen = !isModelOpen
     closeAllPopovers()
     setIsModelOpen(willOpen)
-  }
-
-  const handleNewConversation = () => {
-    if (isSending) return
-    window.electronAPI.resetSession()
-    setMessages([])
-    setMentionAgentId(null)
-    setIsMentionPickerOpen(false)
-    setMentionError(null)
   }
 
   const handleStop = () => {
@@ -508,6 +520,12 @@ export function ChatArea() {
 
       <div className="p-6">
         <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4">
+          {workspaceError && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+              <FolderOpen className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{workspaceError}</span>
+            </div>
+          )}
           {(selectedAgents.length === 0 || mentionError) && (
             <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
               <AtSign className="w-3.5 h-3.5 flex-shrink-0" />
@@ -555,15 +573,6 @@ export function ChatArea() {
           </div>
 
           <div className="flex items-center justify-between mt-3">
-            <button
-              onClick={handleNewConversation}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-              disabled={isSending}
-              title="新建对话"
-            >
-              <Plus className="w-5 h-5 text-gray-500" />
-            </button>
-
             <div className="flex items-center gap-4">
               <button
                 ref={agentButtonRef}
@@ -648,7 +657,9 @@ export function ChatArea() {
       >
         <WorkspacePopover
           selectedWorkspace={selectedWorkspace}
+          workspaces={workspaces}
           onSelectWorkspace={handleSelectWorkspace}
+          onRemoveWorkspace={handleRemoveWorkspace}
         />
       </Popover>
 

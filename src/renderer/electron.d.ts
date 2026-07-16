@@ -6,6 +6,12 @@ interface SendChatMessageParams {
   mentionAgentId?: string
 }
 
+interface Workspace {
+  id: string
+  name: string
+  path: string
+}
+
 interface ChatUsage {
   prompt_tokens: number
   completion_tokens: number
@@ -151,6 +157,7 @@ interface ElectronAPI {
   saveSkill: (skill: SkillFile, target: SkillSource) => Promise<boolean>
   deleteSkill: (source: SkillSource, name: string) => Promise<boolean>,
   resetSession: () => void
+  openWorkspaceFolder: () => Promise<Workspace | null>
   getMemories: () => Promise<MemoryEntry[]>
   addMemory: (entry: { agentId: string; content: string; tags?: string[] }) => Promise<MemoryEntry | null>
   deleteMemory: (id: string) => Promise<boolean>
