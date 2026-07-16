@@ -1,6 +1,7 @@
-allowBuilds:
-  electron: false
-  esbuild: false
-
 packages:
   - "."
+
+allowBuilds:
+  electron-winstaller: false
+  electron: false
+  esbuild: false
