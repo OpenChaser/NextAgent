@@ -76,6 +76,14 @@ interface MemoryEntry {
   createdAt: number
 }
 
+interface TaskItem {
+  id: string
+  title: string
+  messages: any[]
+  createdAt: number
+  updatedAt: number
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   sendChatMessage: (params: SendChatMessageParams) => ipcRenderer.send('chat:send', params),
@@ -101,6 +109,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('chat:error')
   },
   resetSession: () => ipcRenderer.send('chat:reset'),
+  getTasks: () => ipcRenderer.invoke('tasks:get') as Promise<TaskItem[]>,
+  addTask: (task: TaskItem) => ipcRenderer.invoke('tasks:add', task) as Promise<boolean>,
+  updateTask: (task: TaskItem) => ipcRenderer.invoke('tasks:update', task) as Promise<boolean>,
+  deleteTask: (taskId: string) => ipcRenderer.invoke('tasks:delete', taskId) as Promise<boolean>,
+  generateTitle: (params: { message: string; model: string }) =>
+    ipcRenderer.invoke('llm:generateTitle', params) as Promise<string>,
   openWorkspaceFolder: () => ipcRenderer.invoke('workspace:openFolder'),
   getModels: () => ipcRenderer.invoke('models:get'),
   addModel: (model: Model) => ipcRenderer.invoke('models:add', model),

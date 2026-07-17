@@ -101,6 +101,14 @@ interface AgentConfig {
   updatedAt: number
 }
 
+interface TaskItem {
+  id: string
+  title: string
+  messages: any[]
+  createdAt: number
+  updatedAt: number
+}
+
 interface MemoryEntry {
   id: string
   agentId: string
@@ -157,6 +165,11 @@ interface ElectronAPI {
   saveSkill: (skill: SkillFile, target: SkillSource) => Promise<boolean>
   deleteSkill: (source: SkillSource, name: string) => Promise<boolean>,
   resetSession: () => void
+  getTasks: () => Promise<TaskItem[]>
+  addTask: (task: TaskItem) => Promise<boolean>
+  updateTask: (task: TaskItem) => Promise<boolean>
+  deleteTask: (taskId: string) => Promise<boolean>
+  generateTitle: (params: { message: string; model: string }) => Promise<string>
   openWorkspaceFolder: () => Promise<Workspace | null>
   getMemories: () => Promise<MemoryEntry[]>
   addMemory: (entry: { agentId: string; content: string; tags?: string[] }) => Promise<MemoryEntry | null>
