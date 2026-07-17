@@ -128,10 +128,6 @@ export function Sidebar({ activeTab, onTabChange, tasks, currentTaskId, onCreate
               )}
             </div>
           )}
-          <button className="w-full flex items-center justify-between px-3 py-2 mt-3 text-sm text-gray-500 hover:bg-sidebar-hover rounded-lg transition-colors">
-            <span>空间 (3)</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
         </div>
       </nav>
 
