@@ -62,12 +62,14 @@ function ToolCallItem({ tc }: { tc: ToolCallRecord }) {
 interface ChatAreaProps {
   taskId: string | null
   initialMessages: Message[]
+  projectPath?: string
   onTitleGenerated: (taskId: string, title: string) => void
   onMessagesChange: (taskId: string, messages: Message[]) => void
   onEnsureTask: () => Promise<string | null>
+  onProjectPathChange: (taskId: string, path: string) => void
 }
 
-export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessagesChange, onEnsureTask }: ChatAreaProps) {
+export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerated, onMessagesChange, onEnsureTask, onProjectPathChange }: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [isSending, setIsSending] = useState(false)
@@ -111,6 +113,17 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
       renderedTaskIdRef.current = taskId
     }
   }, [taskId, initialMessages])
+
+  useEffect(() => {
+    if (projectPath) {
+      const segs = projectPath.replace(/\\/g, '/').split('/')
+      const dirName = segs.filter(Boolean).pop() || projectPath
+      setSelectedWorkspace({ id: `bound-${projectPath}`, name: dirName, path: projectPath })
+    } else {
+      setSelectedWorkspace(null)
+    }
+    setWorkspaceError(null)
+  }, [projectPath])
 
   useEffect(() => {
     const loadSelectedAgents = async () => {
@@ -185,6 +198,10 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
       activeTaskId = await onEnsureTask()
       if (!activeTaskId) return
       renderedTaskIdRef.current = activeTaskId
+    }
+
+    if (selectedWorkspace?.path) {
+      onProjectPathChange(activeTaskId, selectedWorkspace.path)
     }
 
     const userMessage: Message = {
@@ -354,12 +371,14 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
     })
 
     const effectiveModel = selectedAgents.find((a) => a.model)?.model || selectedModel
+    const projectPathValue = selectedWorkspace?.path
     if (isGroup) {
       window.electronAPI.sendChatMessage({
         message: userMessage.content,
         model: effectiveModel,
         agentIds: selectedAgents.map((a) => a.id),
         mentionAgentId: mentionAgentId || undefined,
+        projectPath: projectPathValue,
       })
       setMentionAgentId(null)
     } else {
@@ -367,6 +386,7 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
         message: userMessage.content,
         model: effectiveModel,
         agentId: selectedAgents[0]?.id,
+        projectPath: projectPathValue,
       })
     }
   }
@@ -408,6 +428,9 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
     setWorkspaces((prev) =>
       prev.some((w) => w.path === workspace.path) ? prev : [workspace, ...prev]
     )
+    if (taskId) {
+      onProjectPathChange(taskId, workspace.path)
+    }
   }
 
   const handleRemoveWorkspace = (id: string, e: React.MouseEvent) => {
@@ -681,16 +704,26 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
 
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
             <div className="flex items-center gap-4">
-              <button
-                ref={workspaceButtonRef}
-                onClick={toggleWorkspace}
-                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-                disabled={isSending}
-              >
-                <FolderOpen className="w-4 h-4" />
-                <span>{selectedWorkspace?.name || '选择工作空间'}</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
+              {selectedWorkspace?.path ? (
+                <div
+                  className="flex items-center gap-1.5 text-sm text-gray-500 min-w-0"
+                  title={selectedWorkspace.path}
+                >
+                  <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate max-w-[360px]">{selectedWorkspace.path}</span>
+                </div>
+              ) : (
+                <button
+                  ref={workspaceButtonRef}
+                  onClick={toggleWorkspace}
+                  className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  disabled={isSending}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  <span>选择工作空间</span>
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              )}
             </div>
             {(lastPromptTokens > 0 || lastCompletionTokens > 0) && (
               <span className="text-xs text-gray-400">
@@ -701,19 +734,21 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
         </div>
       </div>
 
-      <Popover
-        isOpen={isWorkspaceOpen}
-        onClose={closeAllPopovers}
-        anchorRef={workspaceButtonRef}
-        height={200}
-      >
-        <WorkspacePopover
-          selectedWorkspace={selectedWorkspace}
-          workspaces={workspaces}
-          onSelectWorkspace={handleSelectWorkspace}
-          onRemoveWorkspace={handleRemoveWorkspace}
-        />
-      </Popover>
+      {(!selectedWorkspace?.path || isWorkspaceOpen) && (
+        <Popover
+          isOpen={isWorkspaceOpen}
+          onClose={closeAllPopovers}
+          anchorRef={workspaceButtonRef}
+          height={200}
+        >
+          <WorkspacePopover
+            selectedWorkspace={selectedWorkspace}
+            workspaces={workspaces}
+            onSelectWorkspace={handleSelectWorkspace}
+            onRemoveWorkspace={handleRemoveWorkspace}
+          />
+        </Popover>
+      )}
 
       <Popover
         isOpen={isAgentOpen}

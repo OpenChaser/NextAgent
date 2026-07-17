@@ -283,6 +283,7 @@ interface TaskItem {
   id: string
   title: string
   messages: any[]
+  projectPath?: string
   createdAt: number
   updatedAt: number
 }
@@ -731,10 +732,11 @@ interface ChatMessageParams {
   agentId?: string
   agentIds?: string[]
   mentionAgentId?: string
+  projectPath?: string
 }
 
 ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
-  const { message, model, agentId, agentIds, mentionAgentId } = params
+  const { message, model, agentId, agentIds, mentionAgentId, projectPath } = params
   const win = event.sender
 
   // 多智能体群聊模式：选中 2 个及以上智能体时走群聊编排器
@@ -766,7 +768,7 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
       ensureAgentsFile()
       const agents = readJsonFileSync<AgentConfig[]>(getAgentsFilePath()) ?? []
       await runGroupChat(
-        { message, agentIds, mentionAgentId },
+        { message, agentIds, mentionAgentId, projectPath },
         {
           win,
           client,
@@ -879,6 +881,14 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
     const recalled = recallMemories(agentId || '', message)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const messages: any[] = []
+    if (projectPath) {
+      messages.push({
+        role: 'system',
+        content:
+          `当前用户工作的项目目录为：${projectPath}\n` +
+          '请在回答用户问题、生成代码或调用工具时，将该项目目录作为工作上下文（例如默认的文件操作根目录、代码相对路径基准等）。',
+      })
+    }
     if (sess.systemPrompt) {
       messages.push({ role: 'system', content: sess.systemPrompt })
     }

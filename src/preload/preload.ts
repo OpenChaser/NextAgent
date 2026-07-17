@@ -6,6 +6,7 @@ interface SendChatMessageParams {
   agentId?: string
   agentIds?: string[]
   mentionAgentId?: string
+  projectPath?: string
 }
 
 interface ModelConfig {
@@ -80,6 +81,7 @@ interface TaskItem {
   id: string
   title: string
   messages: any[]
+  projectPath?: string
   createdAt: number
   updatedAt: number
 }
