@@ -16,6 +16,22 @@ pnpm run build
 
 上述两条命令均通过后，方可提交代码。该检查与 GitHub Actions 门禁（[.github/workflows/build.yml](.github/workflows/build.yml)）保持一致。
 
+## 运行程序
+
+运行程序前，必须先完成编译，确保运行的是最新代码而非旧的产物：
+
+```bash
+pnpm run typecheck
+pnpm run build
+pnpm start
+```
+
+- 先执行 `pnpm run typecheck` 做类型检查（不产出文件，仅校验主进程与渲染进程类型）。
+- 再执行 `pnpm run build` 编译主进程并打包渲染进程，产出 `dist/`。
+- 上述两条命令均通过后，方可执行 `pnpm start` 启动 Vite dev server 与 Electron 主进程。
+
+> 禁止跳过编译直接 `pnpm start`，否则 Electron 加载的可能仍是旧产物，导致运行行为与最新代码不一致。
+
 ## 架构设计文档同步
 
 凡修改了相关代码或架构设计，必须同步更新 [`docs/design/`](docs/design) 目录下对应的设计文档，确保文档与代码始终保持一致。

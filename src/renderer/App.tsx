@@ -87,6 +87,21 @@ export default function App() {
     })
   }, [])
 
+  const handleProjectPathChange = useCallback((taskId: string, projectPath: string) => {
+    setTasks((prev) => {
+      const target = prev.find((t) => t.id === taskId)
+      if (target && target.projectPath === projectPath) return prev
+      const next = prev.map((t) =>
+        t.id === taskId ? { ...t, projectPath, updatedAt: Date.now() } : t
+      )
+      const updated = next.find((t) => t.id === taskId)
+      if (updated) {
+        window.electronAPI.updateTask(updated)
+      }
+      return next
+    })
+  }, [])
+
   const currentTask = tasks.find((t) => t.id === currentTaskId) ?? null
 
   return (
@@ -111,9 +126,11 @@ export default function App() {
           <ChatArea
             taskId={currentTaskId}
             initialMessages={currentTask?.messages ?? []}
+            projectPath={currentTask?.projectPath}
             onTitleGenerated={handleTitleGenerated}
             onMessagesChange={handleMessagesChange}
             onEnsureTask={ensureTask}
+            onProjectPathChange={handleProjectPathChange}
           />
         )}
       </div>

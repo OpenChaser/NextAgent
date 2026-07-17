@@ -35,6 +35,7 @@ export interface GroupChatParams {
   message: string
   agentIds: string[]
   mentionAgentId?: string
+  projectPath?: string
 }
 
 // 群聊模式运行依赖（由 main.ts 在解析完 provider/client/tools 后注入）
@@ -105,10 +106,19 @@ function buildMessagesForAgent(
   agent: AgentConfig,
   roster: string,
   recalled: MemoryEntry[],
-  formatMemories: (e: MemoryEntry[]) => string
+  formatMemories: (e: MemoryEntry[]) => string,
+  projectPath?: string
 ): any[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const messages: any[] = []
+  if (projectPath) {
+    messages.push({
+      role: 'system',
+      content:
+        `当前用户工作的项目目录为：${projectPath}\n` +
+        '请在回答用户问题、生成代码或调用工具时，将该项目目录作为工作上下文（例如默认的文件操作根目录、代码相对路径基准等）。',
+    })
+  }
   messages.push({ role: 'system', content: roster })
   if (agent.systemPrompt) {
     messages.push({ role: 'system', content: agent.systemPrompt })
@@ -126,7 +136,7 @@ function effectiveToolsFor(agent: AgentConfig, tools: ChatTool[]): ChatTool[] {
 
 export async function runGroupChat(params: GroupChatParams, deps: GroupChatDeps): Promise<void> {
   const { win, client, mcpManager, tools, agents, effectiveModel, modelConfig, signal } = deps
-  const { message, agentIds, mentionAgentId } = params
+  const { message, agentIds, mentionAgentId, projectPath } = params
 
   const members = agents.filter((a) => agentIds.includes(a.id))
   if (members.length < 2) {
@@ -163,7 +173,7 @@ export async function runGroupChat(params: GroupChatParams, deps: GroupChatDeps)
     const roster = buildRoster(members, agent)
     const recalled = deps.recallMemories(agent.id, job.task)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: any[] = buildMessagesForAgent(agent, roster, recalled, deps.formatMemoriesForInjection)
+    const messages: any[] = buildMessagesForAgent(agent, roster, recalled, deps.formatMemoriesForInjection, projectPath)
     const effTools = effectiveToolsFor(agent, tools)
 
     const effectiveMaxTokens =

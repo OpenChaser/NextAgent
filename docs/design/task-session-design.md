@@ -37,6 +37,7 @@ interface TaskItem {
   id: string          // 如 `task-${Date.now()}`
   title: string       // 由 LLM 生成的简短名称，初始占位「新任务」
   messages: any[]     // 该任务的对话历史（Message[]，含 role/content/tool_calls 等）
+  projectPath?: string // 该任务绑定的项目目录绝对路径；首次发送消息或选择项目时落盘，之后不可改
   createdAt: number
   updatedAt: number
 }
@@ -48,7 +49,7 @@ interface TaskItem {
 
 ```json
 [
-  { "id": "task-1", "title": "查询天气", "messages": [...], "createdAt": 0, "updatedAt": 0 }
+  { "id": "task-1", "title": "查询天气", "messages": [...], "projectPath": "D:\\Projects\\Demo", "createdAt": 0, "updatedAt": 0 }
 ]
 ```
 
@@ -101,16 +102,47 @@ interface TaskItem {
 
 > **当前限制**：切换任务时主进程 `sessionContext` 被重置，新发送的消息不会携带该任务之前的对话上下文给 LLM（UI 显示历史，但 LLM 视角是新会话）。多轮上下文的跨任务恢复为主进程会话管理的后续增强项。
 
+### 4.5 项目目录绑定（projectPath）
+
+每个任务在创建后可绑定一个项目目录，绑定后该任务内不再允许修改，且目录路径会注入到发给 LLM 的系统提示词中。
+
+**UI 行为**（`ChatArea.tsx`）：
+
+- `selectedWorkspace`（本地 state）通过 `useEffect` 与 prop `projectPath`（来自 `currentTask.projectPath`）同步：有值则构造只读 Workspace，无值则置空。
+- 渲染分支：
+  - `selectedWorkspace.path` 有值 → 显示项目完整路径文本（只读，`title` 悬浮完整路径），**不渲染**「选择工作空间」按钮与 `WorkspacePopover`。
+  - 无值 → 渲染「选择工作空间」按钮，点击弹出 `WorkspacePopover` 供用户选择。
+- 一旦任务绑定 `projectPath`（落盘后），按钮即不可见，满足「一个会话不能修改项目目录」的约束。
+
+**落盘时机**（`onProjectPathChange(taskId, path)` → `App.handleProjectPathChange`）：
+
+1. `handleSelectWorkspace`：用户在已有 task 中选择项目时，立即落盘到 `task.projectPath`。
+2. `handleSend`：`onEnsureTask()` 创建出 `activeTaskId` 后，若 `selectedWorkspace.path` 存在，落盘到该 task（覆盖「新任务态选项目 → 首条消息触发落盘」的链路）。
+
+`App.handleProjectPathChange` 通过 `updateTask` 把 `projectPath` 写入 `tasks.json`，并在 `projectPath` 未变时短路返回避免冗余写。
+
+**系统提示词注入**（主进程）：
+
+`SendChatMessageParams` / `ChatMessageParams` / `GroupChatParams` 均新增 `projectPath?: string` 字段，由 `ChatArea` 在 `sendChatMessage` 时透传。
+
+- 单 Agent 模式（`main.ts` 组装 `messages` 处）：在 `sess.systemPrompt` 之前 push 一条 system message：
+  ```
+  当前用户工作的项目目录为：{projectPath}
+  请在回答用户问题、生成代码或调用工具时，将该项目目录作为工作上下文（例如默认的文件操作根目录、代码相对路径基准等）。
+  ```
+- 群聊模式（`groupChat.ts` `buildMessagesForAgent`）：在 roster 之前 push 同一条 system message，对群内每个 agent 都注入。
+
 ## 五、关键代码索引
 
 | 文件 | 职责 |
 |------|------|
-| [src/renderer/App.tsx](../../src/renderer/App.tsx) | tasks/currentTaskId 状态、CRUD 回调、ChatArea key 重置 |
+| [src/renderer/App.tsx](../../src/renderer/App.tsx) | tasks/currentTaskId 状态、CRUD 回调、projectPath 绑定回调、ChatArea key 重置 |
 | [src/renderer/components/Sidebar.tsx](../../src/renderer/components/Sidebar.tsx) | 任务列表渲染、新建/切换入口 |
-| [src/renderer/components/ChatArea.tsx](../../src/renderer/components/ChatArea.tsx) | 接收 taskId/initialMessages、取标题、持久化消息 |
-| [src/main/main.ts](../../src/main/main.ts) | TaskItem interface、tasks.json 持久化、tasks CRUD IPC、llm:generateTitle IPC |
-| [src/preload/preload.ts](../../src/preload/preload.ts) | tasks/generateTitle API 桥接、TaskItem 本地类型 |
-| [src/renderer/electron.d.ts](../../src/renderer/electron.d.ts) | TaskItem 类型、ElectronAPI 接口扩展 |
+| [src/renderer/components/ChatArea.tsx](../../src/renderer/components/ChatArea.tsx) | 接收 taskId/initialMessages/projectPath、选择/显示项目目录、取标题、持久化消息、透传 projectPath |
+| [src/main/main.ts](../../src/main/main.ts) | TaskItem interface（含 projectPath）、tasks.json 持久化、tasks CRUD IPC、llm:generateTitle IPC、单 Agent 模式 system prompt 注入 projectPath、透传 projectPath 至群聊 |
+| [src/main/groupChat.ts](../../src/main/groupChat.ts) | GroupChatParams（含 projectPath）、buildMessagesForAgent 注入 projectPath system message |
+| [src/preload/preload.ts](../../src/preload/preload.ts) | tasks/generateTitle API 桥接、TaskItem/SendChatMessageParams 本地类型（含 projectPath） |
+| [src/renderer/electron.d.ts](../../src/renderer/electron.d.ts) | TaskItem / SendChatMessageParams 类型扩展（含 projectPath）、ElectronAPI 接口 |
 
 ## 六、设计要点
 
@@ -122,3 +154,4 @@ interface TaskItem {
 | 任务重置 | ChatArea key={taskId} | 复用 React key 机制，强制重置内部 state |
 | 会话隔离 | 切任务调用 resetSession() | 清空主进程单例 sessionContext |
 | 防御性返回 | generateTitle 失败返回空串 | 标题为锦上添花，失败不阻塞主流程 |
+| 项目目录绑定 | TaskItem.projectPath 单次写入，UI 隐藏选择按钮 | 一个会话不能修改项目目录，绑定后只读显示路径；projectPath 注入 system prompt 让 LLM 感知工作上下文 |
