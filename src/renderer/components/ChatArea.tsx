@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Globe, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign } from 'lucide-react'
+import { Send, Globe, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign, Slash, X } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
 import { ModelPopover } from './ModelPopover'
 import { AgentPopover } from './AgentPopover'
+import { CommandSkillPopover } from './CommandSkillPopover'
 import { Modal } from './Modal'
 import { CustomModelConfigDialog } from './CustomModelConfigDialog'
 
@@ -32,6 +33,15 @@ interface Message {
   model?: string
   usage?: ChatUsage
   tool_calls?: ToolCallRecord[]
+}
+
+interface SkillItem {
+  id: string
+  name: string
+  description: string
+  content: string
+  source: 'global' | 'project'
+  enabled?: boolean
 }
 
 function ToolCallItem({ tc }: { tc: ToolCallRecord }) {
@@ -91,6 +101,12 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const [mentionHighlightIndex, setMentionHighlightIndex] = useState(0)
+  const [skills, setSkills] = useState<SkillItem[]>([])
+  const [selectedSkills, setSelectedSkills] = useState<SkillItem[]>([])
+  const [isCommandPickerOpen, setIsCommandPickerOpen] = useState(false)
+  const [isCommandPopoverOpen, setIsCommandPopoverOpen] = useState(false)
+  const [commandQuery, setCommandQuery] = useState('')
+  const [commandHighlightIndex, setCommandHighlightIndex] = useState(0)
   const [lastPromptTokens, setLastPromptTokens] = useState(0)
   const [lastCompletionTokens, setLastCompletionTokens] = useState(0)
   const [totalPromptTokens, setTotalPromptTokens] = useState(0)
@@ -100,8 +116,10 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
   const workspaceButtonRef = useRef<HTMLButtonElement>(null)
   const modelButtonRef = useRef<HTMLButtonElement>(null)
   const agentButtonRef = useRef<HTMLButtonElement>(null)
+  const commandButtonRef = useRef<HTMLButtonElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mentionListRef = useRef<HTMLDivElement>(null)
+  const commandListRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -157,9 +175,31 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
     loadSelectedAgents()
   }, [])
 
+  useEffect(() => {
+    const loadSkills = async () => {
+      try {
+        const loaded = await window.electronAPI.getSkills()
+        setSkills(loaded)
+      } catch (error) {
+        console.error('Failed to load skills:', error)
+      }
+    }
+    loadSkills()
+  }, [])
+
   const isGroup = selectedAgents.length >= 2
   const filteredMentionAgents = isMentionPickerOpen
     ? selectedAgents.filter((a) => a.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    : []
+
+  const filteredCommandSkills = isCommandPickerOpen
+    ? skills
+        .filter((s) => s.enabled !== false)
+        .filter(
+          (s) =>
+            s.name.toLowerCase().includes(commandQuery.toLowerCase()) ||
+            s.description.toLowerCase().includes(commandQuery.toLowerCase())
+        )
     : []
 
   useEffect(() => {
@@ -173,6 +213,18 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
     const el = mentionListRef.current.querySelector('[data-highlight="true"]') as HTMLElement | null
     el?.scrollIntoView({ block: 'nearest' })
   }, [mentionHighlightIndex, isMentionPickerOpen, mentionQuery])
+
+  useEffect(() => {
+    if (commandHighlightIndex >= filteredCommandSkills.length && filteredCommandSkills.length > 0) {
+      setCommandHighlightIndex(0)
+    }
+  }, [filteredCommandSkills.length, commandHighlightIndex])
+
+  useEffect(() => {
+    if (!isCommandPickerOpen || !commandListRef.current) return
+    const el = commandListRef.current.querySelector('[data-highlight="true"]') as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [commandHighlightIndex, isCommandPickerOpen, commandQuery])
 
   const handleSend = async () => {
     if (!message.trim() || isSending) return
@@ -204,9 +256,12 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
       onProjectPathChange(activeTaskId, selectedWorkspace.path)
     }
 
+    const skillPrefix = selectedSkills.map((s) => s.content).filter(Boolean).join('\n\n')
+    const finalContent = skillPrefix ? `${skillPrefix}\n\n${message.trim()}` : message.trim()
+
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
-      content: message.trim(),
+      content: finalContent,
       role: 'user',
     }
 
@@ -215,9 +270,11 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
     setIsSending(true)
     closeAllPopovers()
     setIsMentionPickerOpen(false)
+    setIsCommandPickerOpen(false)
+    setSelectedSkills([])
 
     if (initialMessages.length === 0) {
-      const userContent = userMessage.content
+      const userContent = message.trim()
       window.electronAPI
         .generateTitle({ message: userContent, model: selectedModel })
         .then((title) => {
@@ -392,6 +449,29 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isCommandPickerOpen && filteredCommandSkills.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setCommandHighlightIndex((prev) => (prev + 1) % filteredCommandSkills.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setCommandHighlightIndex((prev) => (prev - 1 + filteredCommandSkills.length) % filteredCommandSkills.length)
+        return
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        const idx = Math.min(commandHighlightIndex, filteredCommandSkills.length - 1)
+        handlePickCommandSkill(filteredCommandSkills[idx])
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setIsCommandPickerOpen(false)
+        return
+      }
+    }
     if (isMentionPickerOpen && filteredMentionAgents.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -460,6 +540,16 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setMessage(val)
+
+    const slashMatch = /(?:^|\s)\/([^\s]*)$/.exec(val)
+    if (slashMatch) {
+      setCommandQuery(slashMatch[1])
+      setIsCommandPickerOpen(true)
+      setCommandHighlightIndex(0)
+    } else {
+      setIsCommandPickerOpen(false)
+    }
+
     if (!isGroup) {
       setIsMentionPickerOpen(false)
       return
@@ -485,11 +575,30 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
     setMentionError(null)
   }
 
+  const handlePickCommandSkill = (skill: SkillItem) => {
+    setMessage((prev) => prev.replace(/(?:^|\s)\/[^\s]*$/, '').replace(/\s+$/, ' '))
+    setSelectedSkills((prev) => (prev.some((s) => s.id === skill.id) ? prev : [...prev, skill]))
+    setIsCommandPickerOpen(false)
+    setIsCommandPopoverOpen(false)
+    setCommandQuery('')
+  }
+
+  const handleRemoveSkill = (id: string) => {
+    setSelectedSkills((prev) => prev.filter((s) => s.id !== id))
+  }
+
+  const toggleCommandPopover = () => {
+    const willOpen = !isCommandPopoverOpen
+    closeAllPopovers()
+    setIsCommandPopoverOpen(willOpen)
+  }
+
   const closeAllPopovers = () => {
     setIsWorkspaceOpen(false)
     setIsModelOpen(false)
     setIsModelConfigOpen(false)
     setIsAgentOpen(false)
+    setIsCommandPopoverOpen(false)
   }
 
   const handleConfigureModel = () => {
@@ -617,6 +726,27 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
               <span>{selectedAgents.length === 0 ? '请先选择一个智能体后再发送消息' : mentionError}</span>
             </div>
           )}
+          {selectedSkills.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {selectedSkills.map((skill) => (
+                <span
+                  key={skill.id}
+                  title={skill.description}
+                  className="group inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-full pl-2 pr-1 py-0.5"
+                >
+                  <Sparkles className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate max-w-[180px]">/{skill.name}</span>
+                  <button
+                    onClick={() => handleRemoveSkill(skill.id)}
+                    className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-indigo-400 hover:bg-indigo-200 hover:text-indigo-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="移除技能"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="relative">
             {isMentionPickerOpen && (
               <div ref={mentionListRef} className="absolute bottom-full mb-2 left-0 w-[240px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-[200px] overflow-y-auto">
@@ -646,11 +776,41 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
                 )}
               </div>
             )}
+            {isCommandPickerOpen && (
+              <div ref={commandListRef} className="absolute bottom-full mb-2 left-0 w-[280px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-[240px] overflow-hidden flex flex-col">
+                <div className="px-3 pt-2 pb-1.5 flex items-center gap-1.5 border-b border-gray-100">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">技能</span>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {filteredCommandSkills.map((skill, idx) => (
+                    <button
+                      key={skill.id}
+                      onClick={() => handlePickCommandSkill(skill)}
+                      onMouseEnter={() => setCommandHighlightIndex(idx)}
+                      data-highlight={idx === commandHighlightIndex}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-left ${
+                        idx === commandHighlightIndex ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <Sparkles className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-sm text-gray-700 truncate">/{skill.name}</div>
+                        <div className="text-xs text-gray-400 truncate">{skill.description}</div>
+                      </div>
+                    </button>
+                  ))}
+                  {filteredCommandSkills.length === 0 && (
+                    <div className="px-3 py-3 text-xs text-gray-400 text-center">未找到匹配的技能命令</div>
+                  )}
+                </div>
+              </div>
+            )}
             <textarea
               value={message}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder={isGroup ? '群聊模式：请输入 @ 指定首响应智能体后再发送' : '今天帮你做些什么？@ 引用对话文件，/ 调用技能与指令'}
+              placeholder={isGroup ? '群聊模式：请输入 @ 指定首响应智能体后再发送' : '今天帮你做些什么？@ 引用对话文件，/ 调用技能'}
               className="w-full bg-transparent resize-none outline-none text-gray-700 placeholder-gray-400 text-base min-h-[60px] max-h-[200px]"
               rows={3}
               disabled={isSending}
@@ -658,7 +818,42 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
           </div>
 
           <div className="flex items-center justify-between mt-3">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                ref={commandButtonRef}
+                onClick={toggleCommandPopover}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex-shrink-0"
+                disabled={isSending}
+                title="技能"
+              >
+                <Slash className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm text-indigo-600 font-medium">技能</span>
+                <ChevronDown className="w-4 h-4 text-indigo-500" />
+              </button>
+
+              {selectedWorkspace?.path ? (
+                <div
+                  className="flex items-center gap-1.5 text-sm text-gray-500 min-w-0"
+                  title={selectedWorkspace.path}
+                >
+                  <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate max-w-[200px]">{selectedWorkspace.path}</span>
+                </div>
+              ) : (
+                <button
+                  ref={workspaceButtonRef}
+                  onClick={toggleWorkspace}
+                  className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0"
+                  disabled={isSending}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  <span>选择工作空间</span>
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 ref={agentButtonRef}
                 onClick={toggleAgent}
@@ -686,51 +881,29 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
                 <span className="text-sm text-blue-600 font-medium">{selectedModel}</span>
                 <ChevronDown className="w-4 h-4 text-blue-500" />
               </button>
-            </div>
 
-            <button
-              onClick={isSending ? handleStop : handleSend}
-              className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!isSending && (!message.trim() || selectedAgents.length === 0)}
-              title={isSending ? '停止生成' : '发送消息'}
-            >
-              {isSending ? (
-                <Square className="w-5 h-5 text-white" />
-              ) : (
-                <Send className="w-5 h-5 text-white" />
-              )}
-            </button>
+              <button
+                onClick={isSending ? handleStop : handleSend}
+                className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!isSending && (!message.trim() || selectedAgents.length === 0)}
+                title={isSending ? '停止生成' : '发送消息'}
+              >
+                {isSending ? (
+                  <Square className="w-5 h-5 text-white" />
+                ) : (
+                  <Send className="w-5 h-5 text-white" />
+                )}
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-            <div className="flex items-center gap-4">
-              {selectedWorkspace?.path ? (
-                <div
-                  className="flex items-center gap-1.5 text-sm text-gray-500 min-w-0"
-                  title={selectedWorkspace.path}
-                >
-                  <FolderOpen className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate max-w-[360px]">{selectedWorkspace.path}</span>
-                </div>
-              ) : (
-                <button
-                  ref={workspaceButtonRef}
-                  onClick={toggleWorkspace}
-                  className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-                  disabled={isSending}
-                >
-                  <FolderOpen className="w-4 h-4" />
-                  <span>选择工作空间</span>
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            {(lastPromptTokens > 0 || lastCompletionTokens > 0) && (
+          {(lastPromptTokens > 0 || lastCompletionTokens > 0) && (
+            <div className="mt-2 text-right">
               <span className="text-xs text-gray-400">
                 Token消耗：{maxInputTokens > 0 ? `窗口消耗: ${((lastPromptTokens / maxInputTokens) * 100).toFixed(1)}%  |    ` : ''}本次 输入: {lastPromptTokens} 输出: {lastCompletionTokens}    |    累计 输入: {totalPromptTokens} 输出: {totalCompletionTokens}
               </span>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -749,6 +922,19 @@ export function ChatArea({ taskId, initialMessages, projectPath, onTitleGenerate
           />
         </Popover>
       )}
+
+      <Popover
+        isOpen={isCommandPopoverOpen}
+        onClose={closeAllPopovers}
+        anchorRef={commandButtonRef}
+        height={360}
+      >
+        <CommandSkillPopover
+          skills={skills}
+          selectedSkillIds={selectedSkills.map((s) => s.id)}
+          onPickSkill={handlePickCommandSkill}
+        />
+      </Popover>
 
       <Popover
         isOpen={isAgentOpen}
