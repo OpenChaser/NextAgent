@@ -36,10 +36,18 @@ pnpm start
 
 凡修改了相关代码或架构设计，必须同步更新 [`docs/design/`](docs/design) 目录下对应的设计文档，确保文档与代码始终保持一致。
 
+此外，项目维护一份整体架构概览文档 [`docs/project-architecture.md`](docs/project-architecture.md)（涵盖项目定位、技术栈、目录结构、三进程模型、核心模块、数据流、构建命令、代码规模等）。**每次更新代码都要同步更新 `docs/project-architecture.md`**，确保整体架构文档与最新代码一致：
+
+- 代码规模（文件数/行数）有显著变化时，更新「八、代码规模」章节。
+- 新增/删除/重组模块或文件时，更新「四、核心架构」与「五、核心功能模块」对应表格。
+- 数据流或构建命令变化时，更新「六、数据流」与「七、构建与开发命令」章节。
+- 整体架构文档的更新动作应与代码改动放在同一 PR 中提交，避免文档与代码脱节。
+
 当前已纳入管理的设计文档：
 
 | 文档 | 对应模块 |
 |------|----------|
+| [project-architecture.md](docs/project-architecture.md) | 整体架构概览（项目定位 / 技术栈 / 目录结构 / 三进程模型 / 数据流 / 构建命令） |
 | [agent-memory-design.md](docs/design/agent-memory-design.md) | 记忆功能（短记忆 / 长记忆 / 内容压缩） |
 | [builtin-tools-design.md](docs/design/builtin-tools-design.md) | 内置工具系统（ToolDefinition / ReAct 循环） |
 | [builtin-agent-design.md](docs/design/builtin-agent-design.md) | 内置 Agent（Plan / Build / 持久化 / 保护机制） |
