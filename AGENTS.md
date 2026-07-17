@@ -30,6 +30,7 @@ pnpm run build
 | [mcp-design.md](docs/design/mcp-design.md) | MCP（stdio / sse 双传输 / 工具前缀隔离） |
 | [skill-design.md](docs/design/skill-design.md) | SKILL（SKILL.md 格式 / gray-matter 解析 / 双层加载） |
 | [multi-agent-group-design.md](docs/design/multi-agent-group-design.md) | 多 Agent 群聊协同（多选 / Roster / 共享 transcript / delegate_to_agent / 轮转编排） |
+| [task-session-design.md](docs/design/task-session-design.md) | 任务会话（tasks.json 持久化 / 新建任务新会话 / LLM 生成标题 / 侧边栏任务列表 / 历史恢复） |
 
 同步要求：
 

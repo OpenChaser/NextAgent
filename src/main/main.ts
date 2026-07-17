@@ -279,6 +279,14 @@ interface AgentConfig {
   updatedAt: number
 }
 
+interface TaskItem {
+  id: string
+  title: string
+  messages: any[]
+  createdAt: number
+  updatedAt: number
+}
+
 function getAgentsFilePath(): string {
   const homeDir = os.homedir()
   return path.join(homeDir, '.nextagent', 'agents.json')
@@ -459,6 +467,117 @@ ipcMain.handle('agents:delete', (_event, agentId: string) => {
     return false
   }
 })
+
+function getTasksFilePath(): string {
+  const homeDir = os.homedir()
+  return path.join(homeDir, '.nextagent', 'tasks.json')
+}
+
+function ensureTasksFile(): void {
+  const filePath = getTasksFilePath()
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  if (!fs.existsSync(filePath)) {
+    try {
+      writeJsonFileSync(filePath, [])
+    } catch (error) {
+      console.error('Failed to initialize tasks file:', error)
+    }
+  }
+}
+
+ipcMain.handle('tasks:get', () => {
+  ensureTasksFile()
+  const filePath = getTasksFilePath()
+  const tasks = readJsonFileSync<TaskItem[]>(filePath)
+  return tasks ?? []
+})
+
+ipcMain.handle('tasks:add', (_event, newTask: TaskItem) => {
+  ensureTasksFile()
+  const filePath = getTasksFilePath()
+  try {
+    const tasks = readJsonFileSync<TaskItem[]>(filePath) ?? []
+    const exists = tasks.some((t) => t.id === newTask.id)
+    if (!exists) {
+      tasks.push(newTask)
+      writeJsonFileSync(filePath, tasks)
+    }
+    return true
+  } catch (error) {
+    console.error('Failed to add task:', error)
+    return false
+  }
+})
+
+ipcMain.handle('tasks:update', (_event, updatedTask: TaskItem) => {
+  ensureTasksFile()
+  const filePath = getTasksFilePath()
+  try {
+    const tasks = readJsonFileSync<TaskItem[]>(filePath) ?? []
+    const index = tasks.findIndex((t) => t.id === updatedTask.id)
+    if (index !== -1) {
+      tasks[index] = { ...tasks[index], ...updatedTask, updatedAt: Date.now() }
+      writeJsonFileSync(filePath, tasks)
+      return true
+    }
+    return false
+  } catch (error) {
+    console.error('Failed to update task:', error)
+    return false
+  }
+})
+
+ipcMain.handle('tasks:delete', (_event, taskId: string) => {
+  ensureTasksFile()
+  const filePath = getTasksFilePath()
+  try {
+    const tasks = readJsonFileSync<TaskItem[]>(filePath) ?? []
+    const filtered = tasks.filter((t) => t.id !== taskId)
+    writeJsonFileSync(filePath, filtered)
+    return true
+  } catch (error) {
+    console.error('Failed to delete task:', error)
+    return false
+  }
+})
+
+ipcMain.handle(
+  'llm:generateTitle',
+  async (_event, params: { message: string; model: string }): Promise<string> => {
+    try {
+      ensureModelsFile()
+      const filePath = getModelsFilePath()
+      const providers = readJsonFileSync<Model[]>(filePath) ?? []
+      const provider = providers.find((p) => p.models.some((m) => m.name === params.model))
+      if (!provider) {
+        return ''
+      }
+      if (!provider.key) {
+        return ''
+      }
+      const client = new OpenAI({ baseURL: provider.url, apiKey: provider.key })
+      const resp = await client.chat.completions.create({
+        model: params.model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              '请根据用户的首条消息生成一个简短的任务标题，4到10个字，只输出标题文字，不要标点符号和引号',
+          },
+          { role: 'user', content: params.message },
+        ],
+      })
+      const title = resp.choices[0]?.message?.content?.trim() || ''
+      return title
+    } catch (error) {
+      console.error('Failed to generate title:', error)
+      return ''
+    }
+  }
+)
 
 function getPreferencesFilePath(): string {
   const homeDir = os.homedir()

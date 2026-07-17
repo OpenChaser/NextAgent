@@ -1,7 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+﻿import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ChatArea } from '../components/ChatArea'
+
+const noopProps = {
+  taskId: null as string | null,
+  initialMessages: [] as never[],
+  onTitleGenerated: () => {},
+  onMessagesChange: () => {},
+  onEnsureTask: async () => null as string | null,
+}
 
 interface MockAgent {
   id: string
@@ -53,6 +61,7 @@ interface ElectronAPIStub {
   onChatMention: ReturnType<typeof vi.fn>
   onChatDone: ReturnType<typeof vi.fn>
   onChatError: ReturnType<typeof vi.fn>
+  generateTitle: ReturnType<typeof vi.fn>
 }
 
 function installElectronAPI(agents: MockAgent[], selectedIds: string[]): ElectronAPIStub {
@@ -72,6 +81,7 @@ function installElectronAPI(agents: MockAgent[], selectedIds: string[]): Electro
     onChatMention: vi.fn(),
     onChatDone: vi.fn(),
     onChatError: vi.fn(),
+    generateTitle: vi.fn(async () => ''),
   }
   ;(window as unknown as { electronAPI: ElectronAPIStub }).electronAPI = api
   return api
@@ -90,7 +100,7 @@ describe('ChatArea - 群聊 @ 校验', () => {
 
   it('群聊模式下未 @ 直接回车：阻止发送并显示错误提示', async () => {
     const user = userEvent.setup()
-    render(<ChatArea />)
+    render(<ChatArea {...noopProps} />)
     await waitForGroupReady()
 
     const textarea = await screen.findByPlaceholderText(/请输入 @ 指定首响应智能体/)
@@ -104,7 +114,7 @@ describe('ChatArea - 群聊 @ 校验', () => {
 
   it('群聊模式下通过 @ 选择智能体后允许发送', async () => {
     const user = userEvent.setup()
-    render(<ChatArea />)
+    render(<ChatArea {...noopProps} />)
     await waitForGroupReady()
 
     const textarea = await screen.findByPlaceholderText(/请输入 @ 指定首响应智能体/)
@@ -143,7 +153,7 @@ describe('ChatArea - @ 选择器键盘导航', () => {
 
   it('输入 @ 后方向键下移高亮并 Enter 选中第二项', async () => {
     const user = userEvent.setup()
-    render(<ChatArea />)
+    render(<ChatArea {...noopProps} />)
     await waitForGroupReady()
 
     const textarea = await screen.findByPlaceholderText(/请输入 @ 指定首响应智能体/)
@@ -163,7 +173,7 @@ describe('ChatArea - @ 选择器键盘导航', () => {
 
   it('Esc 关闭 @ 选择器', async () => {
     const user = userEvent.setup()
-    render(<ChatArea />)
+    render(<ChatArea {...noopProps} />)
     await waitForGroupReady()
 
     const textarea = await screen.findByPlaceholderText(/请输入 @ 指定首响应智能体/)
@@ -178,7 +188,7 @@ describe('ChatArea - @ 选择器键盘导航', () => {
 
   it('ArrowUp 从首项循环到末项', async () => {
     const user = userEvent.setup()
-    render(<ChatArea />)
+    render(<ChatArea {...noopProps} />)
     await waitForGroupReady()
 
     const textarea = await screen.findByPlaceholderText(/请输入 @ 指定首响应智能体/)
@@ -197,7 +207,7 @@ describe('ChatArea - 单智能体模式', () => {
   it('单 Agent 模式无需 @ 即可发送', async () => {
     const api = installElectronAPI([agentA], ['a'])
     const user = userEvent.setup()
-    render(<ChatArea />)
+    render(<ChatArea {...noopProps} />)
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/今天帮你做些什么/)).toBeInTheDocument()

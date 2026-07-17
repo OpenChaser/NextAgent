@@ -60,9 +60,17 @@ function ToolCallItem({ tc }: { tc: ToolCallRecord }) {
   )
 }
 
-export function ChatArea() {
+interface ChatAreaProps {
+  taskId: string | null
+  initialMessages: Message[]
+  onTitleGenerated: (taskId: string, title: string) => void
+  onMessagesChange: (taskId: string, messages: Message[]) => void
+  onEnsureTask: () => Promise<string | null>
+}
+
+export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessagesChange, onEnsureTask }: ChatAreaProps) {
   const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [isSending, setIsSending] = useState(false)
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false)
   const [isPermissionOpen, setIsPermissionOpen] = useState(false)
@@ -88,6 +96,7 @@ export function ChatArea() {
   const [totalPromptTokens, setTotalPromptTokens] = useState(0)
   const [totalCompletionTokens, setTotalCompletionTokens] = useState(0)
   const [maxInputTokens, setMaxInputTokens] = useState(0)
+  const renderedTaskIdRef = useRef<string | null>(initialMessages.length > 0 ? taskId : null)
   const workspaceButtonRef = useRef<HTMLButtonElement>(null)
   const permissionButtonRef = useRef<HTMLButtonElement>(null)
   const modelButtonRef = useRef<HTMLButtonElement>(null)
@@ -98,6 +107,13 @@ export function ChatArea() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    if (taskId !== renderedTaskIdRef.current) {
+      setMessages(initialMessages)
+      renderedTaskIdRef.current = taskId
+    }
+  }, [taskId, initialMessages])
 
   useEffect(() => {
     const loadSelectedAgents = async () => {
@@ -167,6 +183,13 @@ export function ChatArea() {
     }
     setMentionError(null)
 
+    let activeTaskId = taskId
+    if (!activeTaskId) {
+      activeTaskId = await onEnsureTask()
+      if (!activeTaskId) return
+      renderedTaskIdRef.current = activeTaskId
+    }
+
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
       content: message.trim(),
@@ -178,6 +201,18 @@ export function ChatArea() {
     setIsSending(true)
     closeAllPopovers()
     setIsMentionPickerOpen(false)
+
+    if (activeTaskId && initialMessages.length === 0) {
+      const userContent = userMessage.content
+      window.electronAPI
+        .generateTitle({ message: userContent, model: selectedModel })
+        .then((title) => {
+          if (title) {
+            onTitleGenerated(activeTaskId!, title)
+          }
+        })
+        .catch((err) => console.error('Failed to generate title:', err))
+    }
 
     const speakerToMsgId = new Map<string, string>()
 
@@ -289,6 +324,14 @@ export function ChatArea() {
       }
       setIsSending(false)
       window.electronAPI.removeChatListeners()
+      if (activeTaskId) {
+        setTimeout(() => {
+          setMessages((curr) => {
+            onMessagesChange(activeTaskId!, curr)
+            return curr
+          })
+        }, 0)
+      }
     })
 
     window.electronAPI.onChatError((data) => {
@@ -303,6 +346,14 @@ export function ChatArea() {
       })
       setIsSending(false)
       window.electronAPI.removeChatListeners()
+      if (activeTaskId) {
+        setTimeout(() => {
+          setMessages((curr) => {
+            onMessagesChange(activeTaskId!, curr)
+            return curr
+          })
+        }, 0)
+      }
     })
 
     const effectiveModel = selectedAgents.find((a) => a.model)?.model || selectedModel
