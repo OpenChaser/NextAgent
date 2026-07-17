@@ -88,7 +88,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   sendChatMessage: (params: SendChatMessageParams) => ipcRenderer.send('chat:send', params),
   stopChatMessage: () => ipcRenderer.send('chat:stop'),
-  onChatChunk: (callback: (data: { content: string; agentId?: string; agentName?: string }) => void) =>
+  onChatChunk: (callback: (data: { content?: string; reasoning?: string; agentId?: string; agentName?: string }) => void) =>
     ipcRenderer.on('chat:chunk', (_event, data) => callback(data)),
   onChatToolCall: (callback: (data: { name: string; arguments: string; result: string; agentId?: string }) => void) =>
     ipcRenderer.on('chat:tool_call', (_event, data) => callback(data)),

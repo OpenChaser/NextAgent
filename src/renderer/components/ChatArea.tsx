@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign } from 'lucide-react'
+import { Send, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign, Brain } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
 import { PermissionPopover } from './PermissionPopover'
@@ -33,6 +33,7 @@ interface Message {
   model?: string
   usage?: ChatUsage
   tool_calls?: ToolCallRecord[]
+  reasoning?: string
 }
 
 function ToolCallItem({ tc }: { tc: ToolCallRecord }) {
@@ -54,6 +55,31 @@ function ToolCallItem({ tc }: { tc: ToolCallRecord }) {
         <div className="px-2 pb-2 space-y-1">
           <div className="text-gray-400">参数: {tc.arguments.length > 200 ? tc.arguments.substring(0, 200) + '...' : tc.arguments}</div>
           <div className="text-gray-400">结果: {tc.result.length > 200 ? tc.result.substring(0, 200) + '...' : tc.result}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReasoningItem({ reasoning }: { reasoning: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-1 font-medium text-amber-700 px-2 py-1.5 hover:bg-amber-100"
+      >
+        <ChevronDown
+          size={14}
+          className={`transition-transform shrink-0 ${expanded ? 'rotate-180' : '-rotate-90'}`}
+        />
+        <Brain size={14} className="shrink-0" />
+        <span className="truncate">思考过程</span>
+      </button>
+      {expanded && (
+        <div className="px-2 pb-2">
+          <p className="text-amber-800 whitespace-pre-wrap leading-relaxed">{reasoning}</p>
         </div>
       )}
     </div>
@@ -271,9 +297,17 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
       }
       if (!targetId) return
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === targetId ? { ...m, content: m.content + data.content } : m
-        )
+        prev.map((m) => {
+          if (m.id !== targetId) return m
+          const next: Message = { ...m }
+          if (data.content) {
+            next.content = (m.content || '') + data.content
+          }
+          if (data.reasoning) {
+            next.reasoning = (m.reasoning || '') + data.reasoning
+          }
+          return next
+        })
       )
     })
 
@@ -551,6 +585,11 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
                       <span className="text-purple-400">· {mn.task.length > 40 ? mn.task.substring(0, 40) + '...' : mn.task}</span>
                     </span>
                   ))}
+                </div>
+              )}
+              {msg.role === 'assistant' && msg.reasoning && (
+                <div className="mb-2">
+                  <ReasoningItem reasoning={msg.reasoning} />
                 </div>
               )}
               <div

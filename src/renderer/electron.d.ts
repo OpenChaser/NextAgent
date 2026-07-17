@@ -25,7 +25,8 @@ interface ToolCallRecord {
 }
 
 interface ChatChunkData {
-  content: string
+  content?: string
+  reasoning?: string
   agentId?: string
   agentName?: string
 }

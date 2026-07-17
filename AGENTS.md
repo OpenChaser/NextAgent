@@ -31,6 +31,7 @@ pnpm run build
 | [skill-design.md](docs/design/skill-design.md) | SKILL（SKILL.md 格式 / gray-matter 解析 / 双层加载） |
 | [multi-agent-group-design.md](docs/design/multi-agent-group-design.md) | 多 Agent 群聊协同（多选 / Roster / 共享 transcript / delegate_to_agent / 轮转编排） |
 | [task-session-design.md](docs/design/task-session-design.md) | 任务会话（tasks.json 持久化 / 新建任务新会话 / LLM 生成标题 / 侧边栏任务列表 / 历史恢复） |
+| [thinking-design.md](docs/design/thinking-design.md) | 模型思考模式（DeepSeek enable_thinking / reasoning_content 流式透传 / 折叠展示 / 持久化） |
 
 同步要求：
 

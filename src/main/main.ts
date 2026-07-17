@@ -912,6 +912,8 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
       }
     }
 
+    const isDeepSeekThinkingModel = /deepseek/i.test(effectiveModel) && !/flash/i.test(effectiveModel)
+
     for (let round = 0; round < MAX_ROUNDS; round++) {
       if (signal.aborted) break
 
@@ -923,9 +925,11 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
         stream_options: { include_usage: true },
         ...(agentTemperature !== undefined ? { temperature: agentTemperature } : {}),
         ...(effectiveMaxTokens !== undefined ? { max_tokens: effectiveMaxTokens } : {}),
+        ...(isDeepSeekThinkingModel ? { enable_thinking: true } : {}),
       }, { signal })
 
       let contentBuffer = ''
+      let reasoningBuffer = ''
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const toolCallsBuffer = new Map<number, { id: string; name: string; arguments: string }>()
 
@@ -937,6 +941,14 @@ ipcMain.on('chat:send', async (event, params: ChatMessageParams) => {
         if (delta?.content) {
           contentBuffer += delta.content
           win.send('chat:chunk', { content: delta.content })
+        }
+
+        // 流式思考内容（DeepSeek reasoning_content）
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const reasoningDelta = (delta as any)?.reasoning_content
+        if (reasoningDelta) {
+          reasoningBuffer += reasoningDelta
+          win.send('chat:chunk', { reasoning: reasoningDelta })
         }
 
         // 流式 tool_calls 分片累积
