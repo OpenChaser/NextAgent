@@ -105,6 +105,28 @@ gh pr create \
   --body "<PR 描述，可用多行字符串或 --body-file 指定文件>"
 ```
 
+### PR 提交后检查 GitHub 告警并修复
+
+每次创建 PR 后，必须检查 GitHub 上是否有 CI 失败或静态分析告警（CodeQL / github-code-quality[bot] 等），有问题则修复，**不得带着告警合并**。检查流程：
+
+```bash
+# 1. 查看 CI checks 状态（Compile Check / CodeQL / Analyze 等是否全部 pass）
+gh pr checks <PR编号>
+
+# 2. 查看行内评论（CodeQL 告警以 review comment 形式挂在具体代码行）
+gh api repos/OpenChaser/NextAgent/pulls/<PR编号>/comments --jq '.[] | {commit_id: .commit_id, path: .path, line: .line, body: .body}'
+```
+
+判定与处理：
+
+- **CI checks 全部 pass 且无 review comment**：PR 健康，可进入合并流程。
+- **存在 review comment（如 CodeQL 的 `Useless conditional` / `Dead code` 等）**：逐条核对是否为真实缺陷。
+  - 若为真：在对应代码位置修复 → `pnpm run typecheck` + `pnpm run build` 验证 → 提交并推送（CI 会基于新提交自动重新分析）→ 重新检查直至无新告警。
+  - 若为误报：在 PR 中说明理由，可忽略。
+- **CI check 失败**：查看对应 run 日志（`gh run view <run-id> --log-failed`），定位编译/测试错误并修复。
+
+> 注意：CodeQL 评论是针对**特定 commit** 的，修复推送后旧评论不会自动消失，但新提交上不应再产生新告警。判定「是否还有活跃告警」以**最新提交是否产生新 review comment** 为准。
+
 ### 合并并删除源分支
 
 PR 合并时使用 `gh pr merge --delete-branch`，合并完成后自动删除远程与本地 feature 分支，避免分支堆积：

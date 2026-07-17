@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Globe, Lock, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign } from 'lucide-react'
+import { Send, Globe, ChevronDown, FolderOpen, User, Bot, Sparkles, Square, AtSign } from 'lucide-react'
 import { Popover } from './Popover'
 import { WorkspacePopover } from './WorkspacePopover'
-import { PermissionPopover } from './PermissionPopover'
 import { ModelPopover } from './ModelPopover'
 import { AgentPopover } from './AgentPopover'
 import { Modal } from './Modal'
@@ -73,7 +72,6 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [isSending, setIsSending] = useState(false)
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false)
-  const [isPermissionOpen, setIsPermissionOpen] = useState(false)
   const [isModelOpen, setIsModelOpen] = useState(false)
   const [isModelConfigOpen, setIsModelConfigOpen] = useState(false)
   const [isAgentOpen, setIsAgentOpen] = useState(false)
@@ -98,7 +96,6 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
   const [maxInputTokens, setMaxInputTokens] = useState(0)
   const renderedTaskIdRef = useRef<string | null>(initialMessages.length > 0 ? taskId : null)
   const workspaceButtonRef = useRef<HTMLButtonElement>(null)
-  const permissionButtonRef = useRef<HTMLButtonElement>(null)
   const modelButtonRef = useRef<HTMLButtonElement>(null)
   const agentButtonRef = useRef<HTMLButtonElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -467,7 +464,6 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
 
   const closeAllPopovers = () => {
     setIsWorkspaceOpen(false)
-    setIsPermissionOpen(false)
     setIsModelOpen(false)
     setIsModelConfigOpen(false)
     setIsAgentOpen(false)
@@ -486,12 +482,6 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
     const willOpen = !isWorkspaceOpen
     closeAllPopovers()
     setIsWorkspaceOpen(willOpen)
-  }
-
-  const togglePermission = () => {
-    const willOpen = !isPermissionOpen
-    closeAllPopovers()
-    setIsPermissionOpen(willOpen)
   }
 
   const toggleAgent = () => {
@@ -701,16 +691,6 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
                 <span>{selectedWorkspace?.name || '选择工作空间'}</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
-              <button
-                ref={permissionButtonRef}
-                onClick={togglePermission}
-                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-                disabled={isSending}
-              >
-                <Lock className="w-4 h-4" />
-                <span>默认权限</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
             </div>
             {(lastPromptTokens > 0 || lastCompletionTokens > 0) && (
               <span className="text-xs text-gray-400">
@@ -733,16 +713,6 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
           onSelectWorkspace={handleSelectWorkspace}
           onRemoveWorkspace={handleRemoveWorkspace}
         />
-      </Popover>
-
-      <Popover
-        isOpen={isPermissionOpen}
-        onClose={closeAllPopovers}
-        anchorRef={permissionButtonRef}
-        height={130}
-        alignRight
-      >
-        <PermissionPopover />
       </Popover>
 
       <Popover
