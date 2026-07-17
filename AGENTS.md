@@ -55,6 +55,7 @@ pnpm start
 | [skill-design.md](docs/design/skill-design.md) | SKILL（SKILL.md 格式 / gray-matter 解析 / 双层加载） |
 | [multi-agent-group-design.md](docs/design/multi-agent-group-design.md) | 多 Agent 群聊协同（多选 / Roster / 共享 transcript / delegate_to_agent / 轮转编排） |
 | [task-session-design.md](docs/design/task-session-design.md) | 任务会话（tasks.json 持久化 / 新建任务新会话 / LLM 生成标题 / 侧边栏任务列表 / 历史恢复） |
+| [ui-layout-design.md](docs/design/ui-layout-design.md) | 页面布局（侧边栏 + 主内容区 / 各区域命名词汇表 / 视图切换机制 / 浮层与对话框） |
 
 同步要求：
 
