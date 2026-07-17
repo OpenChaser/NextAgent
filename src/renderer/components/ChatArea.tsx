@@ -202,13 +202,13 @@ export function ChatArea({ taskId, initialMessages, onTitleGenerated, onMessages
     closeAllPopovers()
     setIsMentionPickerOpen(false)
 
-    if (activeTaskId && initialMessages.length === 0) {
+    if (initialMessages.length === 0) {
       const userContent = userMessage.content
       window.electronAPI
         .generateTitle({ message: userContent, model: selectedModel })
         .then((title) => {
-          if (title) {
-            onTitleGenerated(activeTaskId!, title)
+          if (title && activeTaskId) {
+            onTitleGenerated(activeTaskId, title)
           }
         })
         .catch((err) => console.error('Failed to generate title:', err))
